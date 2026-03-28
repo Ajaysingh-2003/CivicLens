@@ -10,4 +10,5 @@ pydantic-settings
 python-dotenv>=1.0.1
 bcrypt
 python-jose[cryptography]
+Shapely>=2.0.0
 python-multipart
