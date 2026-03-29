@@ -14,7 +14,7 @@ def create_user(db: Session, user_in: UserCreate) -> User:
     db_obj = User(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
-        name=user_in.name,
+        name=user_in.full_name,
         role=user_in.role,
         points=0,
         title="Admin User"

@@ -1,11 +1,11 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from app.models.user import UserRole
 
 # Shared properties
 class UserBase(BaseModel):
     email: EmailStr
-    name: Optional[str] = None
+    full_name: Optional[str] = Field(None, alias="full_name")
     role: UserRole = UserRole.NGO_ADMIN # Default role for web panel registration
 
 # Properties to receive via API on creation
