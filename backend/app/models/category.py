@@ -8,6 +8,7 @@ class Category(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, unique=True)
     description = Column(String, nullable=True)
+    marker_color = Column(String, default="#10b981") # Default emerald green
     baseline_sla_hours = Column(Integer, default=48)
 
     issues = relationship("Issue", back_populates="category")

@@ -1,13 +1,17 @@
-from typing import List, Optional
-from sqlalchemy.orm import Session
+from typing import List, Optional, Dict, Any
+from sqlalchemy.orm import Session, joinedload
 from geoalchemy2.shape import to_shape
 from app.models.issue import Issue, IssueStatus
 from app.models.issue_history import IssueHistory
+from app.models.category import Category
+from app.models.user import User
 from app.schemas.issue import IssueCreate, IssueUpdateStatus
 
-def format_issue(issue: Issue) -> dict:
-    """Safely converts the WKBElement PostGIS geometry into React-friendly lat/lng floats."""
+def format_issue(issue: Issue) -> Dict[str, Any]:
+    """Safely converts the WKBElement PostGIS geometry into React-friendly lat/lng floats and adds metadata."""
     issue_dict = {c.name: getattr(issue, c.name) for c in issue.__table__.columns if c.name != 'geom'}
+    
+    # Extract coordinates
     if getattr(issue, 'geom', None) is not None:
         point = to_shape(issue.geom)
         issue_dict["lat"] = point.y
@@ -15,10 +19,24 @@ def format_issue(issue: Issue) -> dict:
     else:
         issue_dict["lat"] = 0.0
         issue_dict["lng"] = 0.0
+
+    # Add Categorization & Branding
+    if issue.category:
+        issue_dict["category_name"] = issue.category.name
+        issue_dict["category_color"] = issue.category.marker_color
+    else:
+        issue_dict["category_name"] = "Uncategorized"
+        issue_dict["category_color"] = "#64748b" # Default grey
+
+    # Add Actor Info
+    if issue.reporter:
+        issue_dict["reporter_name"] = issue.reporter.name
+    
     return issue_dict
 
 def create_issue(db: Session, issue_in: IssueCreate, reporter_id: int) -> dict:
     # Convert lat/lng into a PostGIS EWKT SRID 4326 string
+    # PostGIS usually expects (Longitude Latitude)
     wkt_geom = f"SRID=4326;POINT({issue_in.lng} {issue_in.lat})"
     
     db_obj = Issue(
@@ -50,11 +68,24 @@ def create_issue(db: Session, issue_in: IssueCreate, reporter_id: int) -> dict:
     return format_issue(db_obj)
 
 def get_issues(db: Session, skip: int = 0, limit: int = 100) -> List[dict]:
-    issues = db.query(Issue).offset(skip).limit(limit).all()
+    # Use joinedload to avoid N+1 queries when fetching category info
+    issues = (
+        db.query(Issue)
+        .options(joinedload(Issue.category))
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     return [format_issue(issue) for issue in issues]
 
 def get_issue(db: Session, issue_id: int) -> Optional[dict]:
-    issue = db.query(Issue).filter(Issue.id == issue_id).first()
+    # Load everything needed for the detailed pop-up
+    issue = (
+        db.query(Issue)
+        .options(joinedload(Issue.category), joinedload(Issue.reporter))
+        .filter(Issue.id == issue_id)
+        .first()
+    )
     if issue:
         return format_issue(issue)
     return None
@@ -85,3 +116,4 @@ def update_issue_status(
     db.refresh(issue)
     
     return format_issue(issue)
+

@@ -1,8 +1,10 @@
 from datetime import timedelta
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.api import deps
 from app.core.config import settings
@@ -11,11 +13,13 @@ from app.schemas.token import Token
 from app.services import user_service
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/access-token", response_model=Token)
-def login_access_token(db: Session = Depends(deps.get_db), form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
+@limiter.limit("5/minute")
+def login_access_token(request: Request, db: Session = Depends(deps.get_db), form_data: OAuth2PasswordRequestForm = Depends()) -> Any:
     """
-    OAuth2 compatible token login, check passwords securely, and get an access token for future requests.
+    OAuth2 compatible token login. Rate limited to 5 attempts/minute per IP.
     """
     user = user_service.authenticate_user(db, email=form_data.username, password=form_data.password)
     if not user:
@@ -28,3 +32,4 @@ def login_access_token(db: Session = Depends(deps.get_db), form_data: OAuth2Pass
         "access_token": create_access_token(user.id, expires_delta=access_token_expires),
         "token_type": "bearer",
     }
+

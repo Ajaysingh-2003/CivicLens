@@ -3,11 +3,23 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api import deps
-from app.schemas.issue import IssueCreate, IssueResponse, IssueUpdateStatus
+from app.schemas.issue import IssueCreate, IssueResponse, IssueUpdateStatus, IssueMapResponse
 from app.services import issue_service
 from app.models.user import User
 
 router = APIRouter()
+
+@router.get("/map", response_model=List[IssueMapResponse])
+def read_issues_map(
+    skip: int = 0,
+    limit: int = 500,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    (Web App Dashboard) Fast endpoint for plotting markers with category-specific colors.
+    """
+    return issue_service.get_issues(db, skip=skip, limit=limit)
 
 @router.post("/", response_model=IssueResponse)
 def create_issue(
@@ -19,7 +31,6 @@ def create_issue(
     """
     (Mobile App) Report a new civil issue with strict GPS coordinates.
     """
-    # Later: verify category_id exists, but omitting for brevity and letting FK constraints catch it for now.
     return issue_service.create_issue(db, issue_in=issue_in, reporter_id=current_user.id)
 
 @router.get("/", response_model=List[IssueResponse])
@@ -30,10 +41,23 @@ def read_issues(
     current_user: User = Depends(deps.get_current_active_user)
 ) -> Any:
     """
-    (Web App / Mobile App) Retrieve a list of issues to plot on the map.
+    Retrieve full issue details in list format.
     """
-    issues = issue_service.get_issues(db, skip=skip, limit=limit)
-    return issues
+    return issue_service.get_issues(db, skip=skip, limit=limit)
+
+@router.get("/{issue_id}", response_model=IssueResponse)
+def read_issue_by_id(
+    issue_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    (Dashboard Pop-up) Get technical details for a specific issue.
+    """
+    issue = issue_service.get_issue(db, issue_id=issue_id)
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return issue
 
 @router.patch("/{issue_id}/status", response_model=IssueResponse)
 def update_issue_status(
@@ -44,8 +68,7 @@ def update_issue_status(
     current_admin: User = Depends(deps.get_current_active_admin)
 ) -> Any:
     """
-    (Web App Admin Only) Change the state of an issue (e.g. PENDING -> IN_PROGRESS).
-    This strictly auto-generates a government transparency Audit Log row.
+    (Web App Admin Only) Change the state and record audit log.
     """
     issue = issue_service.update_issue_status(
         db, issue_id=issue_id, status_update=status_update, actor_id=current_admin.id
@@ -53,3 +76,4 @@ def update_issue_status(
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
     return issue
+

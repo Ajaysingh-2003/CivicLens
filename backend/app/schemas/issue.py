@@ -17,6 +17,19 @@ class IssueUpdateStatus(BaseModel):
     status: IssueStatus
     remarks: Optional[str] = Field(None, description="Admin remarks for the audit history log")
 
+class IssueMapResponse(BaseModel):
+    id: int
+    title: str
+    status: IssueStatus
+    priority: IssuePriority
+    category_name: str
+    category_color: str
+    lat: float
+    lng: float
+
+    class Config:
+        from_attributes = True
+
 class IssueResponse(IssueBase):
     id: int
     status: IssueStatus
@@ -25,10 +38,12 @@ class IssueResponse(IssueBase):
     created_at: datetime
     updated_at: Optional[datetime]
     reporter_id: int
-    
-    # We output strict floating point coordinates for the React Mapbox/Leaflet frontend
     lat: float
     lng: float
+    category_name: str
+    category_color: str
+    reporter_name: Optional[str] = None
 
     class Config:
         from_attributes = True
+
