@@ -1,0 +1,169 @@
+import React, { useEffect, useState } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip, ZoomControl } from 'react-leaflet';
+import { LatLngBoundsExpression } from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { api } from '../api';
+import './Dashboard.css';
+import { Bell, Search, User, Map as MapIcon } from 'lucide-react';
+
+export default function DashboardPage() {
+  const [issues, setIssues] = useState<any[]>([]);
+  const [selectedIssue, setSelectedIssue] = useState<any>(null);
+  const [loadingIssue, setLoadingIssue] = useState(false);
+
+  // Define strict world bounds to prevent horizontal repeating and blank spaces on zoom out
+  const worldBounds: LatLngBoundsExpression = [
+    [-90, -180],
+    [90, 180]
+  ];
+
+  useEffect(() => {
+    async function loadIssues() {
+      try {
+        const data = await api.getMapIssues();
+        
+        // Guarantee format compatibility for hex colors that are missing the '#'
+        const formattedData = data.map((issue: any) => ({
+           ...issue,
+           category_color: issue.category_color?.startsWith('#') 
+              ? issue.category_color 
+              : `#${issue.category_color}`
+        }));
+
+        setIssues(formattedData);
+      } catch(e) {
+        console.error(e);
+      }
+    }
+    loadIssues();
+  }, []);
+
+  const handleMarkerClick = async (id: number) => {
+    setLoadingIssue(true);
+    try {
+      const data = await api.getIssueDetails(id);
+      setSelectedIssue(data);
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setLoadingIssue(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("access_token");
+    window.location.reload();
+  };
+
+  // Status map mapping
+  const statusColors: Record<string, string> = {
+    PENDING: '#6b7280',
+    ASSIGNED: '#3b82f6',
+    IN_PROGRESS: '#f59e0b',
+    RESOLVED: '#10b981',
+    REJECTED: '#ef4444'
+  };
+
+  const statusCounts = issues.reduce((acc, issue) => {
+    acc[issue.status] = (acc[issue.status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return (
+    <div className="dashboard-wrapper">
+      <div className="sidebar">
+        <div className="sidebar-brand">
+          <img src="/logo.png" alt="CivicLens Logo" className="sidebar-logo" />
+          <span>CivicLens</span>
+        </div>
+        
+        <div className="sidebar-nav">
+          <div className="nav-item active">
+            <MapIcon size={20} />
+            <span>Incidents</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="main-content">
+        <nav className="top-navbar">
+          <div className="search-bar">
+            <Search size={16} />
+            <input type="text" placeholder="Search incidents..." />
+          </div>
+          <div className="nav-right">
+            <Bell className="icon-btn" size={20} />
+            <User className="icon-btn" size={24} onClick={handleLogout} />
+          </div>
+        </nav>
+
+        <MapContainer 
+          center={[20.5937, 78.9629]} 
+          zoom={5} 
+          minZoom={3} 
+          maxBounds={worldBounds}
+          maxBoundsViscosity={1.0}
+          zoomControl={false}
+          className="full-map"
+        >
+          <TileLayer
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            attribution='Tiles &copy; Esri'
+            noWrap={true}
+            bounds={worldBounds}
+          />
+          <ZoomControl position="bottomright" />
+
+          {issues.map(issue => (
+            <CircleMarker 
+              key={issue.id} 
+              center={[issue.lat, issue.lng]}
+              radius={8}
+              pathOptions={{ 
+                fillColor: issue.category_color || '#10b981', 
+                color: 'white', 
+                weight: 2, 
+                fillOpacity: 1 
+              }}
+              eventHandlers={{ click: () => handleMarkerClick(issue.id) }}
+            >
+              <Tooltip>{issue.category_name} - {issue.status}</Tooltip>
+              <Popup>
+                  {loadingIssue ? <p>Loading details...</p> : (
+                    selectedIssue && selectedIssue.id === issue.id ? (
+                      <div className="popup-details">
+                         <h4>{selectedIssue.title || selectedIssue.category_name}</h4>
+                         <div style={{ marginBottom: '12px' }}>
+                           <span 
+                             className="status-pill" 
+                             style={{ backgroundColor: statusColors[selectedIssue.status] || '#6b7280' }}
+                           >
+                             {selectedIssue.status.replace('_', ' ')}
+                           </span>
+                         </div>
+                         <p>{selectedIssue.description || "No description provided."}</p>
+                      </div>
+                    ) : <p>Loading...</p>
+                  )}
+              </Popup>
+            </CircleMarker>
+          ))}
+        </MapContainer>
+
+        {/* Legend Overlay Floating on Map */}
+        <div className="map-legend">
+          <h3 className="legend-title">Incidents status</h3>
+          <div className="legend-list">
+            {Object.keys(statusColors).map(status => (
+              <div className="legend-item" key={status}>
+                <div className="legend-dot" style={{ backgroundColor: statusColors[status] }}></div>
+                <span className="legend-label">{status.replace('_', ' ')}</span>
+                <span className="legend-count">{statusCounts[status] || 0}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

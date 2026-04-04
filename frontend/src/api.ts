@@ -1,4 +1,4 @@
-const API_URL = "http://127.0.0.1:8001/api/v1";
+const API_URL = "http://127.0.0.1:8000/api/v1";
 
 export const api = {
   login: async (email: string, password: string) => {
@@ -44,4 +44,22 @@ export const api = {
     }
     return res.json();
   },
+
+  getMapIssues: async () => {
+    const token = localStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/issues/map`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Failed to fetch map issues");
+    return res.json();
+  },
+
+  getIssueDetails: async (id: number) => {
+    const token = localStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/issues/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Failed to fetch issue details");
+    return res.json();
+  }
 };

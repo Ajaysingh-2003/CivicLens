@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { api } from "../api";
 
-export default function AuthPage() {
+export default function AuthPage({ onLoginSuccess }: { onLoginSuccess?: () => void }) {
   const [mode, setMode] = useState<"login" | "register">("login");
 
   // Form state
@@ -51,6 +51,7 @@ export default function AuthPage() {
       const data = await api.login(email, password);
       localStorage.setItem("access_token", data.access_token);
       setSuccess("Authenticated successfully! Redirecting to dashboard...");
+      if (onLoginSuccess) setTimeout(onLoginSuccess, 1000);
     } catch (err: any) {
       setError(err.message);
     } finally {
