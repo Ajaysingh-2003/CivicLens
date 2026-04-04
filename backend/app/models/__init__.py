@@ -8,3 +8,5 @@ from app.models.issue_vote import IssueVote
 from app.models.assignment import Assignment
 from app.models.issue_history import IssueHistory
 from app.models.comment import Comment
+from app.models.state import State
+from app.models.city import City

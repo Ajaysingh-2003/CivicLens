@@ -39,10 +39,12 @@ class Issue(Base):
     # Foreign Keys
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
     reporter_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    city_id = Column(Integer, ForeignKey("cities.id"), nullable=True) # Nullable for older issues migration
 
     # Relationships
     category = relationship("Category", back_populates="issues")
     reporter = relationship("User", back_populates="issues_reported")
+    city = relationship("City", back_populates="issues")
     
     images = relationship("IssueImage", back_populates="issue")
     votes = relationship("IssueVote", back_populates="issue")

@@ -27,6 +27,9 @@ class User(Base):
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
     department = relationship("Department", back_populates="users")
     
+    city_id = Column(Integer, ForeignKey("cities.id"), nullable=True)
+    city = relationship("City", back_populates="users")
+    
     issues_reported = relationship("Issue", back_populates="reporter")
     votes_cast = relationship("IssueVote", back_populates="user")
     comments = relationship("Comment", back_populates="author")

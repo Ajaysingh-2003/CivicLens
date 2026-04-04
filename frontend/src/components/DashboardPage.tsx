@@ -64,10 +64,17 @@ export default function DashboardPage() {
     REJECTED: '#ef4444'
   };
 
-  const statusCounts = issues.reduce((acc, issue) => {
-    acc[issue.status] = (acc[issue.status] || 0) + 1;
+  const categoryStats = issues.reduce((acc, issue) => {
+    const cat = issue.category_name || 'Uncategorized';
+    if (!acc[cat]) {
+      acc[cat] = {
+        color: issue.category_color || '#6b7280',
+        count: 0
+      };
+    }
+    acc[cat].count += 1;
     return acc;
-  }, {} as Record<string, number>);
+  }, {} as Record<string, { color: string; count: number }>);
 
   return (
     <div className="dashboard-wrapper">
@@ -152,13 +159,13 @@ export default function DashboardPage() {
 
         {/* Legend Overlay Floating on Map */}
         <div className="map-legend">
-          <h3 className="legend-title">Incidents status</h3>
+          <h3 className="legend-title">Incidents by Category</h3>
           <div className="legend-list">
-            {Object.keys(statusColors).map(status => (
-              <div className="legend-item" key={status}>
-                <div className="legend-dot" style={{ backgroundColor: statusColors[status] }}></div>
-                <span className="legend-label">{status.replace('_', ' ')}</span>
-                <span className="legend-count">{statusCounts[status] || 0}</span>
+            {Object.keys(categoryStats).map(category => (
+              <div className="legend-item" key={category}>
+                <div className="legend-dot" style={{ backgroundColor: categoryStats[category].color }}></div>
+                <span className="legend-label">{category}</span>
+                <span className="legend-count">{categoryStats[category].count}</span>
               </div>
             ))}
           </div>
