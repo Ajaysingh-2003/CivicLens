@@ -1,18 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Mail,
   Lock,
   User,
-  Globe,
   ArrowRight,
   Loader,
-  ShieldCheck,
-  Landmark,
   CheckCircle,
   AlertTriangle,
   KeyRound,
+  Globe,
+  Landmark,
+  ShieldCheck
 } from "lucide-react";
 import { api } from "../api";
+import CustomDropdown from "./CustomDropdown";
 
 export default function AuthPage({ onLoginSuccess }: { onLoginSuccess?: () => void }) {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -23,6 +24,31 @@ export default function AuthPage({ onLoginSuccess }: { onLoginSuccess?: () => vo
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState("CITIZEN");
+
+  // Dynamic dropdown state
+  const [states, setStates] = useState<any[]>([]);
+  const [cities, setCities] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  
+  const [selectedState, setSelectedState] = useState<number | "">("");
+  const [selectedCity, setSelectedCity] = useState<number | "">("");
+  const [selectedDepartment, setSelectedDepartment] = useState<number | "">("");
+
+  useEffect(() => {
+    if (mode === "register" && (role === "GOVT_OFFICIAL" || role === "NGO_ADMIN")) {
+      api.getStates().then(setStates).catch(console.error);
+      api.getDepartments().then(setDepartments).catch(console.error);
+    }
+  }, [mode, role]);
+
+  useEffect(() => {
+    if (selectedState) {
+      api.getCities(selectedState as number).then(setCities).catch(console.error);
+    } else {
+      setCities([]);
+    }
+    setSelectedCity("");
+  }, [selectedState]);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -76,7 +102,15 @@ export default function AuthPage({ onLoginSuccess }: { onLoginSuccess?: () => vo
 
     setLoading(true);
     try {
-      await api.register(email, password, fullName, role);
+      await api.register(
+        email, 
+        password, 
+        fullName, 
+        role,
+        selectedState ? Number(selectedState) : undefined,
+        selectedCity ? Number(selectedCity) : undefined,
+        selectedDepartment ? Number(selectedDepartment) : undefined
+      );
       setSuccess("Account created successfully! Switching to login...");
       setTimeout(() => {
         setMode("login");
@@ -224,6 +258,47 @@ export default function AuthPage({ onLoginSuccess }: { onLoginSuccess?: () => vo
                 </select>
               </div>
             </div>
+
+            {(role === "GOVT_OFFICIAL" || role === "NGO_ADMIN") && (
+              <>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">State</label>
+                    <CustomDropdown 
+                      options={states}
+                      value={selectedState}
+                      onChange={(val) => setSelectedState(val as number)}
+                      placeholder="Select State"
+                      icon={<Globe />}
+                      searchable={true}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">City / District</label>
+                    <CustomDropdown 
+                      options={cities}
+                      value={selectedCity}
+                      onChange={(val) => setSelectedCity(val as number)}
+                      placeholder="Select City"
+                      icon={<Landmark />}
+                      disabled={!selectedState}
+                      searchable={true}
+                    />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Department</label>
+                  <CustomDropdown 
+                    options={departments}
+                    value={selectedDepartment}
+                    onChange={(val) => setSelectedDepartment(val as number)}
+                    placeholder="Select Department"
+                    icon={<ShieldCheck />}
+                    searchable={false}
+                  />
+                </div>
+              </>
+            )}
 
             <div className="form-row">
               <div className="form-group">

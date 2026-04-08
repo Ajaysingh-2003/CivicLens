@@ -1,15 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip, ZoomControl } from 'react-leaflet';
 import { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { api } from '../api';
 import './Dashboard.css';
-import { Bell, Search, User, Map as MapIcon } from 'lucide-react';
+import { Bell, User, Map as MapIcon } from 'lucide-react';
 
 export default function DashboardPage() {
   const [issues, setIssues] = useState<any[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<any>(null);
   const [loadingIssue, setLoadingIssue] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
   // Define strict world bounds to prevent horizontal repeating and blank spaces on zoom out
   const worldBounds: LatLngBoundsExpression = [
@@ -35,7 +36,18 @@ export default function DashboardPage() {
         console.error(e);
       }
     }
+    
+    async function loadUser() {
+      try {
+        const u = await api.getMe();
+        setUser(u);
+      } catch(e) {
+        console.error(e);
+      }
+    }
+
     loadIssues();
+    loadUser();
   }, []);
 
   const handleMarkerClick = async (id: number) => {
@@ -94,9 +106,10 @@ export default function DashboardPage() {
 
       <div className="main-content">
         <nav className="top-navbar">
-          <div className="search-bar">
-            <Search size={16} />
-            <input type="text" placeholder="Search incidents..." />
+          <div className="welcome-message">
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--on-surface)' }}>
+              Welcome, {user?.full_name || user?.name || "Citizen"}
+            </h2>
           </div>
           <div className="nav-right">
             <Bell className="icon-btn" size={20} />

@@ -23,7 +23,10 @@ export const api = {
     email: string,
     password: string,
     fullName: string,
-    role: string
+    role: string,
+    stateId?: number,
+    cityId?: number,
+    departmentId?: number
   ) => {
     const res = await fetch(`${API_URL}/users/register`, {
       method: "POST",
@@ -33,6 +36,9 @@ export const api = {
         password,
         full_name: fullName,
         role,
+        state_id: stateId,
+        city_id: cityId,
+        department_id: departmentId
       }),
     });
 
@@ -45,12 +51,39 @@ export const api = {
     return res.json();
   },
 
+  getStates: async () => {
+    const res = await fetch(`${API_URL}/locations/states`);
+    if (!res.ok) throw new Error("Failed to fetch states");
+    return res.json();
+  },
+
+  getCities: async (stateId: number) => {
+    const res = await fetch(`${API_URL}/locations/states/${stateId}/cities`);
+    if (!res.ok) throw new Error("Failed to fetch cities");
+    return res.json();
+  },
+
+  getDepartments: async () => {
+    const res = await fetch(`${API_URL}/departments/`);
+    if (!res.ok) throw new Error("Failed to fetch departments");
+    return res.json();
+  },
+
   getMapIssues: async () => {
     const token = localStorage.getItem("access_token");
     const res = await fetch(`${API_URL}/issues/map`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) throw new Error("Failed to fetch map issues");
+    return res.json();
+  },
+
+  getMe: async () => {
+    const token = localStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/users/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Failed to fetch user");
     return res.json();
   },
 

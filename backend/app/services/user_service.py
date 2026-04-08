@@ -11,13 +11,29 @@ def get_user(db: Session, user_id: int) -> Optional[User]:
     return db.query(User).filter(User.id == user_id).first()
 
 def create_user(db: Session, user_in: UserCreate) -> User:
+    # Handle dynamic title based on role
+    title = "Citizen"
+    if user_in.role == "GOVT_OFFICIAL" or user_in.role == "NGO_ADMIN":
+        prefix = "Govt Official" if user_in.role == "GOVT_OFFICIAL" else "NGO Admin"
+        if user_in.department_id:
+            from app.models.department import Department
+            dept = db.query(Department).filter(Department.id == user_in.department_id).first()
+            if dept:
+                title = f"{prefix}: {dept.name}"
+            else:
+                title = prefix
+        else:
+            title = prefix
+
     db_obj = User(
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
         name=user_in.full_name,
         role=user_in.role,
         points=0,
-        title="Admin User"
+        title=title,
+        city_id=user_in.city_id,
+        department_id=user_in.department_id
     )
     db.add(db_obj)
     db.commit()

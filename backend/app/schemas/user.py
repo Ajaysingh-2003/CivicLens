@@ -11,6 +11,9 @@ class UserBase(BaseModel):
 # Properties to receive via API on creation
 class UserCreate(UserBase):
     password: str
+    state_id: Optional[int] = None
+    city_id: Optional[int] = None
+    department_id: Optional[int] = None
 
 # Properties to return to client (Notice no hashed_password here!)
 class UserResponse(UserBase):
@@ -18,6 +21,7 @@ class UserResponse(UserBase):
     is_active: bool
     points: int
     title: str
+    name: Optional[str] = None
 
     class Config:
         from_attributes = True
