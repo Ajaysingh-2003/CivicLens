@@ -6,7 +6,7 @@ from app.models.user import UserRole
 class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = Field(None, alias="full_name")
-    role: UserRole = UserRole.NGO_ADMIN # Default role for web panel registration
+    role: UserRole = UserRole.CITIZEN # Default role
 
 # Properties to receive via API on creation
 class UserCreate(UserBase):

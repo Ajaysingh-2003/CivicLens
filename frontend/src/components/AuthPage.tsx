@@ -23,7 +23,7 @@ export default function AuthPage({ onLoginSuccess }: { onLoginSuccess?: () => vo
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState("CITIZEN");
+  const role = "GOVT_OFFICIAL";
 
   // Dynamic dropdown state
   const [states, setStates] = useState<any[]>([]);
@@ -35,11 +35,11 @@ export default function AuthPage({ onLoginSuccess }: { onLoginSuccess?: () => vo
   const [selectedDepartment, setSelectedDepartment] = useState<number | "">("");
 
   useEffect(() => {
-    if (mode === "register" && (role === "GOVT_OFFICIAL" || role === "NGO_ADMIN")) {
+    if (mode === "register") {
       api.getStates().then(setStates).catch(console.error);
       api.getDepartments().then(setDepartments).catch(console.error);
     }
-  }, [mode, role]);
+  }, [mode]);
 
   useEffect(() => {
     if (selectedState) {
@@ -140,7 +140,7 @@ export default function AuthPage({ onLoginSuccess }: { onLoginSuccess?: () => vo
           <p className="auth-card-subtitle">
             {mode === "login"
               ? "Sign in to access your dashboard."
-              : "Register as a Municipal Official or Citizen."}
+              : "Register your official municipal account."}
           </p>
         </div>
 
@@ -239,67 +239,42 @@ export default function AuthPage({ onLoginSuccess }: { onLoginSuccess?: () => vo
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Access Role</label>
-              <div className="input-wrapper">
-                <Globe className="input-icon" />
-                <select
-                  className="form-input"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                >
-                  <option value="CITIZEN">Citizen (Reporter)</option>
-                  <option value="GOVT_OFFICIAL">
-                    Government Official (Assignee)
-                  </option>
-                  <option value="NGO_ADMIN">
-                    NGO Admin (Triage Dashboard)
-                  </option>
-                </select>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">State</label>
+                <CustomDropdown 
+                  options={states}
+                  value={selectedState}
+                  onChange={(val) => setSelectedState(val as number)}
+                  placeholder="Select State"
+                  icon={<Globe />}
+                  searchable={true}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">City / District</label>
+                <CustomDropdown 
+                  options={cities}
+                  value={selectedCity}
+                  onChange={(val) => setSelectedCity(val as number)}
+                  placeholder="Select City"
+                  icon={<Landmark />}
+                  disabled={!selectedState}
+                  searchable={true}
+                />
               </div>
             </div>
-
-            {(role === "GOVT_OFFICIAL" || role === "NGO_ADMIN") && (
-              <>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">State</label>
-                    <CustomDropdown 
-                      options={states}
-                      value={selectedState}
-                      onChange={(val) => setSelectedState(val as number)}
-                      placeholder="Select State"
-                      icon={<Globe />}
-                      searchable={true}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">City / District</label>
-                    <CustomDropdown 
-                      options={cities}
-                      value={selectedCity}
-                      onChange={(val) => setSelectedCity(val as number)}
-                      placeholder="Select City"
-                      icon={<Landmark />}
-                      disabled={!selectedState}
-                      searchable={true}
-                    />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Department</label>
-                  <CustomDropdown 
-                    options={departments}
-                    value={selectedDepartment}
-                    onChange={(val) => setSelectedDepartment(val as number)}
-                    placeholder="Select Department"
-                    icon={<ShieldCheck />}
-                    searchable={false}
-                  />
-                </div>
-              </>
-            )}
-
+            <div className="form-group">
+              <label className="form-label">Department</label>
+              <CustomDropdown 
+                options={departments}
+                value={selectedDepartment}
+                onChange={(val) => setSelectedDepartment(val as number)}
+                placeholder="Select Department"
+                icon={<ShieldCheck />}
+                searchable={false}
+              />
+            </div>
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Set Password</label>
