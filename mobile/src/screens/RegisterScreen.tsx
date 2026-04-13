@@ -10,6 +10,8 @@ export default function RegisterScreen({ navigation }: any) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState('CITIZEN');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [states, setStates] = useState<any[]>([]);
   const [cities, setCities] = useState<any[]>([]);
@@ -85,9 +87,9 @@ export default function RegisterScreen({ navigation }: any) {
   return (
     <KeyboardAvoidingView 
       style={styles.container} 
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.title}>Join CivicLens</Text>
           <Text style={styles.subtitle}>Register your field reporting account.</Text>
@@ -175,7 +177,10 @@ export default function RegisterScreen({ navigation }: any) {
           <Text style={styles.label}>Set Password *</Text>
           <View style={styles.inputbox}>
             <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.icon} />
-            <TextInput style={styles.input} placeholder="Create strong password" value={password} onChangeText={setPassword} secureTextEntry />
+            <TextInput style={styles.input} placeholder="Create strong password" value={password} onChangeText={setPassword} secureTextEntry={!showPassword} />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color="#666" />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -183,7 +188,10 @@ export default function RegisterScreen({ navigation }: any) {
           <Text style={styles.label}>Confirm Password *</Text>
           <View style={styles.inputbox}>
             <Ionicons name="key-outline" size={20} color="#666" style={styles.icon} />
-            <TextInput style={styles.input} placeholder="Repeat password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+            <TextInput style={styles.input} placeholder="Repeat password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showConfirmPassword} />
+            <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+              <Ionicons name={showConfirmPassword ? "eye-outline" : "eye-off-outline"} size={20} color="#666" />
+            </TouchableOpacity>
           </View>
         </View>
 

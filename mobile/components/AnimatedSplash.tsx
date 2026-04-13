@@ -38,6 +38,7 @@ export default function SplashScreen({ onFinish }: { onFinish?: () => void }) {
     <View style={styles.container}>
       <Animated.View style={[styles.logoWrap, { opacity: fadeIn }]}>
         <Image source={LOGO} style={styles.logo} resizeMode="contain" />
+        <Text style={styles.tagline}>Add some Lens to your Civic Sense</Text>
       </Animated.View>
 
       {/* Loading bar */}
@@ -57,10 +58,18 @@ const styles = StyleSheet.create({
   },
   logoWrap: {
     marginBottom: 48,
+    alignItems: 'center',
   },
   logo: {
     width: 180,
     height: 220,
+    marginBottom: 20,
+  },
+  tagline: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '500',
+    textAlign: 'center',
   },
   barTrack: {
     width: 200,
