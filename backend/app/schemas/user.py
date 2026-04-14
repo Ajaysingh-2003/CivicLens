@@ -22,6 +22,7 @@ class UserResponse(UserBase):
     points: int
     title: str
     name: Optional[str] = None
+    avatar_url: Optional[str] = None
 
     class Config:
         from_attributes = True

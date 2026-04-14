@@ -80,5 +80,48 @@ export const api = {
     });
     if (!res.ok) throw new Error("Failed to fetch user");
     return res.json();
+  },
+
+  getIssues: async (lat?: number, lng?: number, radiusKm: number = 5.0) => {
+    const token = await AsyncStorage.getItem("access_token");
+    let url = `${API_URL}/issues/?`;
+    if (lat !== undefined && lng !== undefined) {
+      url += `lat=${lat}&lng=${lng}&radius_km=${radiusKm}`;
+    }
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Failed to fetch feed");
+    return res.json();
+  },
+
+  getMyIssues: async () => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/issues/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Failed to fetch your reports");
+    return res.json();
+  },
+
+  uploadAvatar: async () => {
+    // For now this is mocked on the backend, so we don't actually need to send a formData file.
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/users/me/avatar`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Failed to upload avatar");
+    return res.json();
+  },
+
+  removeAvatar: async () => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/users/me/avatar`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Failed to remove avatar");
+    return res.json();
   }
 };

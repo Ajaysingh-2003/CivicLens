@@ -34,3 +34,24 @@ def read_user_me(current_user: User = Depends(deps.get_current_active_user)) -> 
     """
     return current_user
 
+@router.post("/me/avatar", response_model=UserResponse)
+def mock_upload_avatar(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """Mock upload: Assign a realistic avatar URL until S3 is integrated"""
+    import random
+    current_user.avatar_url = f"https://i.pravatar.cc/150?u={current_user.id}{random.randint(1,100)}"
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+@router.delete("/me/avatar", response_model=UserResponse)
+def remove_avatar(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    current_user.avatar_url = None
+    db.commit()
+    db.refresh(current_user)
+    return current_user

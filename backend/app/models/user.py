@@ -22,6 +22,8 @@ class User(Base):
     # Gamification
     points = Column(Integer, default=0)
     title = Column(String, default="Citizen")
+    
+    avatar_url = Column(String, nullable=True)
 
     # Relations
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)

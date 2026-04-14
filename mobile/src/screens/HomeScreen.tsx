@@ -1,47 +1,84 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, StatusBar } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, StatusBar, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../services/AuthContext';
+import { api } from '../services/api';
 
 const { width } = Dimensions.get('window');
 
-// Dummy data for visual replication
-const DUMMY_ISSUES = [
-  {
-    id: '1',
-    user: 'Michael Scott',
-    time: '2 hours ago',
-    distance: '1.2 km away',
-    title: 'Massive Pothole on 5th Avenue',
-    description: 'Causing severe traffic slowdowns. Deep enough to damage tires.',
-    status: 'IN PROGRESS',
-    statusColor: '#006399',
-    upvotes: 156,
-    comments: 24,
-    image: 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?q=80&w=800&auto=format&fit=crop'
-  },
-  {
-    id: '2',
-    user: 'Leslie Knope',
-    time: '5 hours ago',
-    distance: '3.4 km away',
-    title: 'Illegal Dumping at Pawnee Park',
-    description: 'Construction debris left blocking the pedestrian sidewalk.',
-    status: 'PENDING',
-    statusColor: '#838485',
-    upvotes: 89,
-    comments: 12,
-    image: 'https://images.unsplash.com/photo-1532996122724-e3c354a0b15f?q=80&w=800&auto=format&fit=crop'
-  },
-];
+// Time formatter
+const formatTime = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+  if (diffHrs < 24) return `${diffHrs} hours ago`;
+  const diffDays = Math.floor(diffHrs / 24);
+  return `${diffDays} days ago`;
+};
 
 export default function HomeScreen() {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('Feed');
+  const { user, logout } = useAuth();
+  
+  // Navigation State
+  const [activeSegment, setActiveSegment] = useState('Feed'); // 'Feed' | 'Map'
+  const [activeBottomNav, setActiveBottomNav] = useState('Feed'); // 'Feed' | 'My Reports' | 'Profile'
+  
+  // Data State
+  const [issues, setIssues] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Profile specific states
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const loadIssues = async () => {
+    setLoading(true);
+    try {
+      if (activeBottomNav === 'Feed') {
+        const data = await api.getIssues(); // Add GPS coordinates here eventually
+        setIssues(data);
+      } else if (activeBottomNav === 'My Reports') {
+        const data = await api.getMyIssues();
+        setIssues(data);
+      }
+    } catch (err: any) {
+      console.log('Error Loading Issues:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeBottomNav === 'Feed' || activeBottomNav === 'My Reports') {
+      loadIssues();
+    }
+  }, [activeBottomNav]);
+
+  const handleAvatarUpload = async () => {
+    setUploadingAvatar(true);
+    try {
+      await api.uploadAvatar();
+      Alert.alert("Success", "Avatar updated! Please re-login to see changes universally.");
+    } catch (err) {
+      Alert.alert("Error", "Failed to mock upload avatar");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    try {
+      await api.removeAvatar();
+      Alert.alert("Success", "Avatar removed! Please re-login to see changes universally.");
+    } catch (err) {
+      Alert.alert("Error", "Failed to remove avatar");
+    }
+  };
 
   const displayName = user?.name || user?.full_name || 'Jane Doe';
   const displayTitle = user?.title || 'Level 1: Citizen Explorer';
+  const avatarUrl = user?.avatar_url || 'https://i.pravatar.cc/150?u=fallback';
   
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -53,91 +90,137 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>Hello, {displayName}</Text>
           <View style={styles.titleRow}>
             <Ionicons name="star" size={12} color="#4CAF50" />
-            <Text style={styles.gamifiedTitle}>{displayTitle}</Text>
+            <Text style={styles.gamifiedTitle}>{displayTitle} • {user?.points || 0} pts</Text>
           </View>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: '70%' }]} />
           </View>
         </View>
-        <TouchableOpacity style={styles.avatarButton}>
+        <TouchableOpacity style={styles.avatarButton} onPress={() => setActiveBottomNav('Profile')}>
           <Image 
-            source={{ uri: 'https://i.pravatar.cc/150?u=a042581f4e29026704d' }} 
+            source={{ uri: avatarUrl }} 
             style={styles.avatarImage} 
           />
         </TouchableOpacity>
       </View>
 
-      {/* Segmented Control */}
-      <View style={styles.segmentContainer}>
-        <TouchableOpacity 
-          style={[styles.segmentButton, activeTab === 'Feed' && styles.segmentActive]}
-          onPress={() => setActiveTab('Feed')}
-        >
-          <Text style={[styles.segmentText, activeTab === 'Feed' && styles.segmentTextActive]}>Feed</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.segmentButton, activeTab === 'Map' && styles.segmentActive]}
-          onPress={() => setActiveTab('Map')}
-        >
-          <Text style={[styles.segmentText, activeTab === 'Map' && styles.segmentTextActive]}>Map</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 2. Main Content Feed */}
-      <ScrollView style={styles.feedContainer} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-        {DUMMY_ISSUES.map(issue => (
-          <View key={issue.id} style={styles.card}>
+      {/* Main Display Area Based on Navigation */}
+      {activeBottomNav === 'Profile' ? (
+        <View style={styles.profileContainer}>
+          <Image source={{ uri: avatarUrl }} style={styles.profileLargeAvatar} />
+          <Text style={styles.profileName}>{displayName}</Text>
+          <Text style={styles.profileMeta}>{user?.email} • {user?.role}</Text>
+          
+          <View style={styles.profileActions}>
+            <TouchableOpacity style={styles.btnPrimary} onPress={handleAvatarUpload} disabled={uploadingAvatar}>
+              <Text style={styles.btnPrimaryText}>{uploadingAvatar ? "Uploading..." : "Upload New Avatar"}</Text>
+            </TouchableOpacity>
             
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardMeta}><Ionicons name="person-outline" size={12} /> {issue.user} • {issue.time}</Text>
-              <Text style={styles.cardDistance}><Ionicons name="location-outline" size={12} /> {issue.distance}</Text>
-            </View>
+            <TouchableOpacity style={styles.btnSecondary} onPress={handleAvatarRemove}>
+              <Text style={styles.btnSecondaryText}>Remove Avatar</Text>
+            </TouchableOpacity>
 
-            <View style={styles.imageContainer}>
-              <Image source={{ uri: issue.image }} style={styles.cardImage} />
-              <View style={[styles.statusPill, { backgroundColor: issue.statusColor }]}>
-                <Text style={styles.statusText}>{issue.status}</Text>
-              </View>
-            </View>
-
-            <View style={styles.cardBody}>
-              <Text style={styles.cardTitle}>{issue.title}</Text>
-              <Text style={styles.cardDesc} numberOfLines={2}>{issue.description}</Text>
-            </View>
-
-            <View style={styles.cardFooter}>
-              <TouchableOpacity style={styles.actionBtn}>
-                <Ionicons name="caret-up-outline" size={20} color="#666" />
-                <Text style={styles.actionText}>{issue.upvotes}</Text>
-                <Ionicons name="caret-down-outline" size={20} color="#666" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn}>
-                <Ionicons name="chatbubble-outline" size={18} color="#666" />
-                <Text style={[styles.actionText, { marginLeft: 6 }]}>{issue.comments}</Text>
+            <View style={{ marginTop: 40, width: '100%' }}>
+              <TouchableOpacity style={styles.btnDanger} onPress={logout}>
+                <Ionicons name="log-out-outline" size={20} color="#ff4444" style={{marginRight: 8}} />
+                <Text style={styles.btnDangerText}>Logout</Text>
               </TouchableOpacity>
             </View>
-
           </View>
-        ))}
-      </ScrollView>
+        </View>
+      ) : (
+        <>
+          {/* Segmented Control for Feed / Map */}
+          {activeBottomNav === 'Feed' && (
+            <View style={styles.segmentContainer}>
+              <TouchableOpacity 
+                style={[styles.segmentButton, activeSegment === 'Feed' && styles.segmentActive]}
+                onPress={() => setActiveSegment('Feed')}
+              >
+                <Text style={[styles.segmentText, activeSegment === 'Feed' && styles.segmentTextActive]}>Feed</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.segmentButton, activeSegment === 'Map' && styles.segmentActive]}
+                onPress={() => setActiveSegment('Map')}
+              >
+                <Text style={[styles.segmentText, activeSegment === 'Map' && styles.segmentTextActive]}>Map</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
-      {/* 3. Bottom Navigation */}
+          {activeBottomNav === 'My Reports' && (
+            <View style={{ padding: 20, paddingBottom: 0 }}>
+              <Text style={{ fontSize: 22, fontWeight: '700' }}>Your Reports</Text>
+            </View>
+          )}
+
+          {/* Issue List */}
+          {loading ? (
+            <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+               <ActivityIndicator size="large" color="#4CAF50" />
+            </View>
+          ) : (
+            <ScrollView style={styles.feedContainer} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+              {issues.length === 0 ? (
+                <Text style={{ textAlign: 'center', marginTop: 40, color: '#888' }}>No issues found.</Text>
+              ) : (
+                issues.map(issue => (
+                  <View key={issue.id} style={styles.card}>
+                    
+                    <View style={styles.cardHeader}>
+                      <Text style={styles.cardMeta}><Ionicons name="person-outline" size={12} /> {issue.reporter_name || 'Anonymous'} • {formatTime(issue.created_at)}</Text>
+                    </View>
+
+                    {issue.image_url && (
+                      <View style={styles.imageContainer}>
+                        <Image source={{ uri: issue.image_url }} style={styles.cardImage} />
+                        <View style={[styles.statusPill, { backgroundColor: issue.category_color }]}>
+                          <Text style={styles.statusText}>{issue.status}</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    <View style={styles.cardBody}>
+                      <Text style={styles.cardTitle}>{issue.title}</Text>
+                      <Text style={styles.cardDesc} numberOfLines={2}>{issue.description}</Text>
+                    </View>
+
+                    <View style={styles.cardFooter}>
+                      <TouchableOpacity style={styles.actionBtn}>
+                        <Ionicons name="caret-up-outline" size={20} color="#666" />
+                        <Text style={styles.actionText}>{issue.upvotes}</Text>
+                        <Ionicons name="caret-down-outline" size={20} color="#666" />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.actionBtn}>
+                        <Ionicons name="chatbubble-outline" size={18} color="#666" />
+                        <Text style={[styles.actionText, { marginLeft: 6 }]}>{issue.comments_count}</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          )}
+        </>
+      )}
+
+      {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="compass" size={26} color="#4CAF50" />
-          <Text style={[styles.navText, { color: '#4CAF50' }]}>Feed</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => setActiveBottomNav('Feed')}>
+          <Ionicons name={activeBottomNav === 'Feed' ? "compass" : "compass-outline"} size={26} color={activeBottomNav === 'Feed' ? "#4CAF50" : "#838485"} />
+          <Text style={[styles.navText, activeBottomNav === 'Feed' && { color: '#4CAF50' }]}>Feed</Text>
         </TouchableOpacity>
 
-        {/* Center Floating Action Button */}
         <View style={styles.fabWrapper}>
           <TouchableOpacity style={styles.fab}>
             <Ionicons name="camera" size={28} color="#ffffff" />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="clipboard-outline" size={26} color="#838485" />
-          <Text style={styles.navText}>My Reports</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => setActiveBottomNav('My Reports')}>
+          <Ionicons name={activeBottomNav === 'My Reports' ? "clipboard" : "clipboard-outline"} size={26} color={activeBottomNav === 'My Reports' ? "#4CAF50" : "#838485"} />
+          <Text style={[styles.navText, activeBottomNav === 'My Reports' && { color: '#4CAF50' }]}>My Reports</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -385,5 +468,74 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
+  },
+  // Profile specific styles
+  profileContainer: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 40,
+    paddingHorizontal: 20,
+  },
+  profileLargeAvatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#eee',
+    marginBottom: 20,
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#333333',
+    marginBottom: 4,
+  },
+  profileMeta: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 30,
+  },
+  profileActions: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  btnPrimary: {
+    width: '100%',
+    backgroundColor: '#4CAF50',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  btnPrimaryText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  btnSecondary: {
+    width: '100%',
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  btnSecondaryText: {
+    color: '#333333',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  btnDanger: {
+    flexDirection: 'row',
+    width: '100%',
+    borderColor: '#ff4444',
+    borderWidth: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnDangerText: {
+    color: '#ff4444',
+    fontWeight: '700',
+    fontSize: 16,
   }
 });

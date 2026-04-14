@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -37,13 +37,28 @@ def create_issue(
 def read_issues(
     skip: int = 0,
     limit: int = 100,
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    radius_km: float = 5.0,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user)
 ) -> Any:
     """
-    Retrieve full issue details in list format.
+    Retrieve full issue details in list format (Feed), sorted by location if provided.
     """
-    return issue_service.get_issues(db, skip=skip, limit=limit)
+    return issue_service.get_issues(db, skip=skip, limit=limit, lat=lat, lng=lng, radius_km=radius_km)
+
+@router.get("/me", response_model=List[IssueResponse])
+def read_issues_me(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Retrieve the issues strictly reported by the currently logged-in user.
+    """
+    return issue_service.get_user_issues(db, user_id=current_user.id, skip=skip, limit=limit)
 
 @router.get("/{issue_id}", response_model=IssueResponse)
 def read_issue_by_id(
