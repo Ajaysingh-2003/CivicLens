@@ -18,6 +18,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(SAEnum(UserRole), default=UserRole.CITIZEN, nullable=False)
     is_active = Column(Boolean, default=True)
+    is_email_verified = Column(Boolean, default=False)
     
     # Gamification
     points = Column(Integer, default=0)

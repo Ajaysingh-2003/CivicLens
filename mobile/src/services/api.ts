@@ -123,5 +123,48 @@ export const api = {
     });
     if (!res.ok) throw new Error("Failed to remove avatar");
     return res.json();
+  },
+
+  resendOtp: async (email: string, purpose: 'register' | 'login') => {
+    const endpoint = purpose === 'register' ? '/users/register/resend-otp' : '/login/resend-login-otp';
+    const res = await fetch(`${API_URL}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Failed to resend OTP");
+    }
+    return res.json();
+  },
+
+  verifyRegisterOtp: async (email: string, otpCode: string) => {
+    const res = await fetch(`${API_URL}/users/register/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp_code: otpCode }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Invalid OTP");
+    }
+    return res.json();
+  },
+
+  verifyLoginOtp: async (email: string, otpCode: string) => {
+    const res = await fetch(`${API_URL}/login/verify-login-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp_code: otpCode }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Invalid OTP");
+    }
+    return res.json();
   }
 };

@@ -24,11 +24,15 @@ export default function LoginScreen({ navigation }: any) {
 
     try {
       const data = await api.login(email, password);
-      // After getting token, we fetch user profile to complete login
-      await login(data.access_token, null); 
-      // AuthContext handles fetching getMe() if we reload, or we can fetch it explicitly here
-      const user = await api.getMe();
-      await login(data.access_token, user);
+      
+      if (data.status === 'mfa_required') {
+        navigation.navigate('OtpScreen', { email, purpose: 'login' });
+      } else {
+        // Fallback for non-MFA login (if any)
+        await login(data.access_token, null); 
+        const user = await api.getMe();
+        await login(data.access_token, user);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {

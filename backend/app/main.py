@@ -33,3 +33,6 @@ app.include_router(api_router, prefix="/api/v1")
 def root():
     return {"message": "Welcome to the CivicLens API - Auth is perfectly secure!"}
 
+@app.get("/ping")
+def ping():
+    return {"ping": "pong"}

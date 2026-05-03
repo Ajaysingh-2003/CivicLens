@@ -75,8 +75,8 @@ export default function RegisterScreen({ navigation }: any) {
       );
       setSuccess(true);
       setTimeout(() => {
-        navigation.navigate('Login');
-      }, 2000);
+        navigation.navigate('OtpScreen', { email, purpose: 'register' });
+      }, 1000);
     } catch (err: any) {
       setError(err.message);
     } finally {
