@@ -109,14 +109,24 @@ def read_user_me(current_user: User = Depends(deps.get_current_active_user)) -> 
     """
     return current_user
 
+from fastapi import File, UploadFile
+from app.services import storage_service
+
 @router.post("/me/avatar", response_model=UserResponse)
-def mock_upload_avatar(
+def upload_avatar(
+    file: UploadFile = File(...),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user)
 ) -> Any:
-    """Mock upload: Assign a realistic avatar URL until S3 is integrated"""
-    import random
-    current_user.avatar_url = f"https://i.pravatar.cc/150?u={current_user.id}{random.randint(1,100)}"
+    """Uploads a new avatar to Cloudflare R2 and updates the user record."""
+    # Delete old avatar if exists
+    if current_user.avatar_url:
+        storage_service.delete_avatar(current_user.avatar_url)
+        
+    # Upload new avatar
+    new_avatar_url = storage_service.upload_avatar(file, current_user.id)
+    
+    current_user.avatar_url = new_avatar_url
     db.commit()
     db.refresh(current_user)
     return current_user
@@ -126,6 +136,10 @@ def remove_avatar(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user)
 ) -> Any:
+    """Deletes the user's avatar from Cloudflare R2 and the database."""
+    if current_user.avatar_url:
+        storage_service.delete_avatar(current_user.avatar_url)
+        
     current_user.avatar_url = None
     db.commit()
     db.refresh(current_user)

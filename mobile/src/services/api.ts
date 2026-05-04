@@ -166,5 +166,50 @@ export const api = {
       throw new Error(errorData?.detail || "Invalid OTP");
     }
     return res.json();
+  },
+
+  uploadAvatar: async (imageUri: string) => {
+    const token = await AsyncStorage.getItem("access_token");
+    // Generate filename from URI
+    const filename = imageUri.split('/').pop() || 'avatar.jpg';
+    
+    // Infer type from extension
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : `image`;
+
+    const formData = new FormData();
+    // @ts-ignore - React Native FormData accepts an object with uri, name, type
+    formData.append('file', { uri: imageUri, name: filename, type });
+
+    const res = await fetch(`${API_URL}/users/me/avatar`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "multipart/form-data",
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Failed to upload avatar");
+    }
+    return res.json();
+  },
+
+  removeAvatar: async () => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/users/me/avatar`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Failed to remove avatar");
+    }
+    return res.json();
   }
 };

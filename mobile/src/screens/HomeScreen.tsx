@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, StatusBar, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../services/AuthContext';
 import { api } from '../services/api';
 
@@ -55,13 +56,69 @@ export default function HomeScreen() {
     }
   }, [activeBottomNav]);
 
-  const handleAvatarUpload = async () => {
+  const handlePickImage = async (useCamera: boolean) => {
+    try {
+      if (useCamera) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Sorry, we need camera permissions to make this work!');
+          return;
+        }
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
+          return;
+        }
+      }
+
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images, // STRICTLY IMAGES ONLY
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      };
+
+      const result = useCamera 
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        await uploadImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const showImagePickerOptions = () => {
+    Alert.alert(
+      "Update Profile Picture",
+      "Choose a source for your new avatar",
+      [
+        { text: "Take Photo", onPress: () => handlePickImage(true) },
+        { text: "Choose from Gallery", onPress: () => handlePickImage(false) },
+        { text: "Cancel", style: "cancel" }
+      ]
+    );
+  };
+
+  const uploadImage = async (uri: string) => {
     setUploadingAvatar(true);
     try {
-      await api.uploadAvatar();
-      Alert.alert("Success", "Avatar updated! Please re-login to see changes universally.");
-    } catch (err) {
-      Alert.alert("Error", "Failed to mock upload avatar");
+      const updatedUser = await api.uploadAvatar(uri);
+      
+      // Update the user in AuthContext so UI updates instantly
+      import('@react-native-async-storage/async-storage').then(async (AsyncStorage) => {
+          const token = await AsyncStorage.default.getItem('access_token');
+          if (token) {
+              await login(token, updatedUser);
+          }
+      });
+      Alert.alert("Success", "Avatar updated successfully!");
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to upload avatar");
     } finally {
       setUploadingAvatar(false);
     }
@@ -69,10 +126,20 @@ export default function HomeScreen() {
 
   const handleAvatarRemove = async () => {
     try {
-      await api.removeAvatar();
-      Alert.alert("Success", "Avatar removed! Please re-login to see changes universally.");
-    } catch (err) {
-      Alert.alert("Error", "Failed to remove avatar");
+      setUploadingAvatar(true);
+      const updatedUser = await api.removeAvatar();
+      
+      import('@react-native-async-storage/async-storage').then(async (AsyncStorage) => {
+          const token = await AsyncStorage.default.getItem('access_token');
+          if (token) {
+              await login(token, updatedUser);
+          }
+      });
+      Alert.alert("Success", "Avatar removed successfully!");
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to remove avatar");
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -112,7 +179,7 @@ export default function HomeScreen() {
           <Text style={styles.profileMeta}>{user?.email} • {user?.role}</Text>
           
           <View style={styles.profileActions}>
-            <TouchableOpacity style={styles.btnPrimary} onPress={handleAvatarUpload} disabled={uploadingAvatar}>
+            <TouchableOpacity style={styles.btnPrimary} onPress={showImagePickerOptions} disabled={uploadingAvatar}>
               <Text style={styles.btnPrimaryText}>{uploadingAvatar ? "Uploading..." : "Upload New Avatar"}</Text>
             </TouchableOpacity>
             
