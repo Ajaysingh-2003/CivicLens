@@ -1,5 +1,6 @@
 import boto3
 from botocore.exceptions import NoCredentialsError
+from botocore.client import Config
 from fastapi import UploadFile, HTTPException
 import uuid
 import datetime
@@ -11,7 +12,8 @@ s3_client = boto3.client(
     endpoint_url=f"https://{settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
     aws_access_key_id=settings.R2_ACCESS_KEY_ID,
     aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
-    region_name="auto" # Required for boto3 but R2 handles regions automatically
+    region_name="auto", # Required for boto3 but R2 handles regions automatically
+    config=Config(s3={'addressing_style': 'path'})
 )
 
 def upload_avatar(file: UploadFile, user_id: int) -> str:

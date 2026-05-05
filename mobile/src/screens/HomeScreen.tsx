@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, StatusBar, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, StatusBar, ActivityIndicator, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../services/AuthContext';
 import { api } from '../services/api';
 
@@ -20,7 +21,7 @@ const formatTime = (dateString: string) => {
 };
 
 export default function HomeScreen() {
-  const { user, logout } = useAuth();
+  const { user, login, logout } = useAuth();
   
   // Navigation State
   const [activeSegment, setActiveSegment] = useState('Feed'); // 'Feed' | 'Map'
@@ -32,6 +33,7 @@ export default function HomeScreen() {
 
   // Profile specific states
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [isAvatarModalVisible, setAvatarModalVisible] = useState(false);
 
   const loadIssues = async () => {
     setLoading(true);
@@ -89,19 +91,13 @@ export default function HomeScreen() {
     } catch (error) {
       console.error(error);
       Alert.alert('Error', 'Failed to pick image');
+    } finally {
+      setAvatarModalVisible(false);
     }
   };
 
   const showImagePickerOptions = () => {
-    Alert.alert(
-      "Update Profile Picture",
-      "Choose a source for your new avatar",
-      [
-        { text: "Take Photo", onPress: () => handlePickImage(true) },
-        { text: "Choose from Gallery", onPress: () => handlePickImage(false) },
-        { text: "Cancel", style: "cancel" }
-      ]
-    );
+    setAvatarModalVisible(true);
   };
 
   const uploadImage = async (uri: string) => {
@@ -109,13 +105,10 @@ export default function HomeScreen() {
     try {
       const updatedUser = await api.uploadAvatar(uri);
       
-      // Update the user in AuthContext so UI updates instantly
-      import('@react-native-async-storage/async-storage').then(async (AsyncStorage) => {
-          const token = await AsyncStorage.default.getItem('access_token');
-          if (token) {
-              await login(token, updatedUser);
-          }
-      });
+      const token = await AsyncStorage.getItem('access_token');
+      if (token) {
+          await login(token, updatedUser);
+      }
       Alert.alert("Success", "Avatar updated successfully!");
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to upload avatar");
@@ -129,12 +122,10 @@ export default function HomeScreen() {
       setUploadingAvatar(true);
       const updatedUser = await api.removeAvatar();
       
-      import('@react-native-async-storage/async-storage').then(async (AsyncStorage) => {
-          const token = await AsyncStorage.default.getItem('access_token');
-          if (token) {
-              await login(token, updatedUser);
-          }
-      });
+      const token = await AsyncStorage.getItem('access_token');
+      if (token) {
+          await login(token, updatedUser);
+      }
       Alert.alert("Success", "Avatar removed successfully!");
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to remove avatar");
@@ -154,47 +145,102 @@ export default function HomeScreen() {
       {/* 1. Header Segment */}
       <View style={styles.header}>
         <View style={styles.headerTextGroup}>
-          <Text style={styles.greeting}>Hello, {displayName}</Text>
-          <View style={styles.titleRow}>
-            <Ionicons name="star" size={12} color="#4CAF50" />
-            <Text style={styles.gamifiedTitle}>{displayTitle} • {user?.points || 0} pts</Text>
-          </View>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: '70%' }]} />
-          </View>
+          <Text style={styles.greeting}>{activeBottomNav === 'Profile' ? 'Account' : `Hello, ${displayName}`}</Text>
+          {activeBottomNav !== 'Profile' && (
+            <View style={styles.titleRow}>
+              <Ionicons name="star" size={12} color="#4CAF50" />
+              <Text style={styles.gamifiedTitle}>{displayTitle} • {user?.points || 0} pts</Text>
+            </View>
+          )}
+          {activeBottomNav !== 'Profile' && (
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: '70%' }]} />
+            </View>
+          )}
         </View>
-        <TouchableOpacity style={styles.avatarButton} onPress={() => setActiveBottomNav('Profile')}>
-          <Image 
-            source={{ uri: avatarUrl }} 
-            style={styles.avatarImage} 
-          />
-        </TouchableOpacity>
+        {activeBottomNav !== 'Profile' && (
+          <TouchableOpacity style={styles.avatarButton} onPress={() => setActiveBottomNav('Profile')}>
+            <Image 
+              source={{ uri: avatarUrl }} 
+              style={styles.avatarImage} 
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Main Display Area Based on Navigation */}
       {activeBottomNav === 'Profile' ? (
-        <View style={styles.profileContainer}>
-          <Image source={{ uri: avatarUrl }} style={styles.profileLargeAvatar} />
-          <Text style={styles.profileName}>{displayName}</Text>
-          <Text style={styles.profileMeta}>{user?.email} • {user?.role}</Text>
+        <ScrollView style={styles.profileContainer} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
           
-          <View style={styles.profileActions}>
-            <TouchableOpacity style={styles.btnPrimary} onPress={showImagePickerOptions} disabled={uploadingAvatar}>
-              <Text style={styles.btnPrimaryText}>{uploadingAvatar ? "Uploading..." : "Upload New Avatar"}</Text>
+          <View style={styles.profileHeader}>
+            <TouchableOpacity onPress={showImagePickerOptions} style={styles.profileAvatarWrapper}>
+              <Image source={{ uri: avatarUrl }} style={styles.profileLargeAvatar} />
+              <View style={styles.cameraBadge}>
+                <Ionicons name="camera" size={16} color="#ffffff" />
+              </View>
             </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.btnSecondary} onPress={handleAvatarRemove}>
-              <Text style={styles.btnSecondaryText}>Remove Avatar</Text>
+            <Text style={styles.profileName}>{displayName}</Text>
+            <Text style={styles.profileMeta}>{user?.email}</Text>
+          </View>
+
+          <View style={styles.pointsCard}>
+            <View style={styles.pointsHeader}>
+              <Text style={styles.pointsTitle}>Citizen Points</Text>
+              <Text style={styles.pointsValue}>{user?.points || 0} / 1000</Text>
+            </View>
+            <View style={styles.progressTrackLarge}>
+              <View style={[styles.progressFillLarge, { width: `${Math.min(((user?.points || 0)/1000)*100, 100)}%` }]} />
+            </View>
+            <Text style={styles.pointsSubtext}>Impact Level: {displayTitle}</Text>
+          </View>
+
+          <View style={styles.settingsGroup}>
+            <TouchableOpacity style={styles.settingsRow} onPress={() => setActiveBottomNav('My Reports')}>
+              <View style={styles.settingsIconWrapper}>
+                <Ionicons name="clipboard-outline" size={20} color="#4CAF50" />
+              </View>
+              <Text style={styles.settingsText}>My Reports</Text>
+              <Ionicons name="chevron-forward" size={20} color="#acadad" />
             </TouchableOpacity>
 
-            <View style={{ marginTop: 40, width: '100%' }}>
-              <TouchableOpacity style={styles.btnDanger} onPress={logout}>
-                <Ionicons name="log-out-outline" size={20} color="#ff4444" style={{marginRight: 8}} />
-                <Text style={styles.btnDangerText}>Logout</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.settingsRow}>
+              <View style={styles.settingsIconWrapper}>
+                <Ionicons name="person-outline" size={20} color="#4CAF50" />
+              </View>
+              <Text style={styles.settingsText}>Account Details</Text>
+              <Ionicons name="chevron-forward" size={20} color="#acadad" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.settingsRow}>
+              <View style={styles.settingsIconWrapper}>
+                <Ionicons name="notifications-outline" size={20} color="#4CAF50" />
+              </View>
+              <Text style={styles.settingsText}>Notifications</Text>
+              <Ionicons name="chevron-forward" size={20} color="#acadad" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.settingsRow}>
+              <View style={styles.settingsIconWrapper}>
+                <Ionicons name="shield-checkmark-outline" size={20} color="#4CAF50" />
+              </View>
+              <Text style={styles.settingsText}>Privacy & Security</Text>
+              <Ionicons name="chevron-forward" size={20} color="#acadad" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.settingsRow}>
+              <View style={styles.settingsIconWrapper}>
+                <Ionicons name="help-circle-outline" size={20} color="#4CAF50" />
+              </View>
+              <Text style={styles.settingsText}>Help & Support</Text>
+              <Ionicons name="chevron-forward" size={20} color="#acadad" />
+            </TouchableOpacity>
           </View>
-        </View>
+
+          <TouchableOpacity style={styles.btnDanger} onPress={logout}>
+            <Text style={styles.btnDangerText}>Logout Account</Text>
+          </TouchableOpacity>
+
+        </ScrollView>
       ) : (
         <>
           {/* Segmented Control for Feed / Map */}
@@ -290,6 +336,33 @@ export default function HomeScreen() {
           <Text style={[styles.navText, activeBottomNav === 'My Reports' && { color: '#4CAF50' }]}>My Reports</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Avatar Actions Modal */}
+      <Modal visible={isAvatarModalVisible} transparent={true} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Update Avatar</Text>
+            <Text style={styles.modalSubtext}>Choose how you want to update your profile photo.</Text>
+            
+            <TouchableOpacity style={styles.btnModalPrimary} onPress={() => handlePickImage(false)} disabled={uploadingAvatar}>
+              <Text style={styles.btnModalPrimaryText}>{uploadingAvatar ? "Uploading..." : "Upload New Avatar"}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.btnModalPrimary} onPress={() => handlePickImage(true)} disabled={uploadingAvatar}>
+              <Text style={styles.btnModalPrimaryText}>{uploadingAvatar ? "Uploading..." : "Take Photo"}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.btnModalSecondary} onPress={() => { handleAvatarRemove(); setAvatarModalVisible(false); }}>
+              <Text style={styles.btnModalSecondaryText}>Remove Avatar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.btnModalCancel} onPress={() => setAvatarModalVisible(false)}>
+              <Text style={styles.btnModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -539,70 +612,203 @@ const styles = StyleSheet.create({
   // Profile specific styles
   profileContainer: {
     flex: 1,
-    alignItems: 'center',
-    paddingTop: 40,
     paddingHorizontal: 20,
+    paddingTop: 32,
+  },
+  profileHeader: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  profileAvatarWrapper: {
+    position: 'relative',
+    marginBottom: 16,
   },
   profileLargeAvatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: '#eee',
-    marginBottom: 20,
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#4CAF50',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FAFAFA',
   },
   profileName: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     color: '#333333',
     marginBottom: 4,
   },
   profileMeta: {
     fontSize: 14,
-    color: '#666666',
-    marginBottom: 30,
+    color: '#888888',
+    fontWeight: '500',
   },
-  profileActions: {
+  pointsCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 32,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  pointsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pointsTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#333333',
+  },
+  pointsValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4CAF50',
+  },
+  progressTrackLarge: {
+    height: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 4,
     width: '100%',
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  progressFillLarge: {
+    height: '100%',
+    backgroundColor: '#4CAF50',
+    borderRadius: 4,
+  },
+  pointsSubtext: {
+    fontSize: 13,
+    color: '#888888',
+    fontWeight: '500',
+  },
+  settingsGroup: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    marginBottom: 32,
+    shadowColor: '#000',
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+    overflow: 'hidden',
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
+  },
+  settingsIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F2FCEE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  settingsText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333333',
+  },
+  btnDanger: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF5F5',
+    marginBottom: 20,
+  },
+  btnDangerText: {
+    color: '#FF3B30',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    width: '100%',
+    borderRadius: 24,
+    padding: 24,
     alignItems: 'center',
   },
-  btnPrimary: {
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#333333',
+    marginBottom: 8,
+  },
+  modalSubtext: {
+    fontSize: 14,
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 20,
+  },
+  btnModalPrimary: {
     width: '100%',
     backgroundColor: '#4CAF50',
-    paddingVertical: 14,
+    paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 12,
   },
-  btnPrimaryText: {
+  btnModalPrimaryText: {
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 16,
   },
-  btnSecondary: {
+  btnModalSecondary: {
     width: '100%',
-    backgroundColor: '#f0f0f0',
-    paddingVertical: 14,
+    backgroundColor: '#F2F2F7',
+    paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
+    marginBottom: 24,
   },
-  btnSecondaryText: {
+  btnModalSecondaryText: {
     color: '#333333',
-    fontWeight: '600',
+    fontWeight: '700',
     fontSize: 16,
   },
-  btnDanger: {
-    flexDirection: 'row',
+  btnModalCancel: {
     width: '100%',
-    borderColor: '#ff4444',
-    borderWidth: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 12,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  btnDangerText: {
-    color: '#ff4444',
-    fontWeight: '700',
+  btnModalCancelText: {
+    color: '#888888',
+    fontWeight: '600',
     fontSize: 16,
   }
 });
