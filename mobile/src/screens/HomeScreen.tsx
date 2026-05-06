@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../services/AuthContext';
 import { api } from '../services/api';
+import ReportIncidentModal from '../components/ReportIncidentModal';
 
 const { width } = Dimensions.get('window');
 
@@ -34,6 +35,10 @@ export default function HomeScreen() {
   // Profile specific states
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [isAvatarModalVisible, setAvatarModalVisible] = useState(false);
+
+  // Report Incident Modal State
+  const [isReportModalVisible, setReportModalVisible] = useState(false);
+  const [reportImageUri, setReportImageUri] = useState<string | null>(null);
 
   const loadIssues = async () => {
     setLoading(true);
@@ -131,6 +136,32 @@ export default function HomeScreen() {
       Alert.alert("Error", err.message || "Failed to remove avatar");
     } finally {
       setUploadingAvatar(false);
+    }
+  };
+
+  const handleReportIncident = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Sorry, we need camera permissions to make this work!');
+        return;
+      }
+
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      };
+
+      const result = await ImagePicker.launchCameraAsync(options);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setReportImageUri(result.assets[0].uri);
+        setReportModalVisible(true);
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to launch camera');
     }
   };
 
@@ -326,7 +357,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         <View style={styles.fabWrapper}>
-          <TouchableOpacity style={styles.fab}>
+          <TouchableOpacity style={styles.fab} onPress={handleReportIncident}>
             <Ionicons name="camera" size={28} color="#ffffff" />
           </TouchableOpacity>
         </View>
@@ -362,6 +393,21 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      <ReportIncidentModal
+        visible={isReportModalVisible}
+        imageUri={reportImageUri}
+        onClose={() => {
+          setReportModalVisible(false);
+          setReportImageUri(null);
+        }}
+        onSuccess={() => {
+          setReportModalVisible(false);
+          setReportImageUri(null);
+          setActiveBottomNav('My Reports'); // Switch to reports tab to see it
+          loadIssues();
+        }}
+      />
 
     </SafeAreaView>
   );

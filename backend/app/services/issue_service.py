@@ -6,6 +6,7 @@ from app.models.issue import Issue, IssueStatus
 from app.models.issue_history import IssueHistory
 from app.models.category import Category
 from app.models.user import User
+from app.models.issue_image import IssueImage
 import random
 from app.schemas.issue import IssueCreate, IssueUpdateStatus
 
@@ -34,14 +35,11 @@ def format_issue(issue: Issue) -> Dict[str, Any]:
     if issue.reporter:
         issue_dict["reporter_name"] = issue.reporter.name
         
-    # Mock Image URL
-    mock_images = [
-        "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?q=80&w=800&auto=format&fit=crop", # Pothole
-        "https://images.unsplash.com/photo-1532996122724-e3c354a0b15f?q=80&w=800&auto=format&fit=crop", # Garbage
-        "https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?q=80&w=800&auto=format&fit=crop", # Ruined road
-        "https://images.unsplash.com/photo-1605806616949-1e87b487cb2a?q=80&w=800&auto=format&fit=crop"  # Flood
-    ]
-    issue_dict["image_url"] = random.choice(mock_images)
+    # Image URL
+    if getattr(issue, 'images', None) and len(issue.images) > 0:
+        issue_dict["image_url"] = issue.images[0].image_url
+    else:
+        issue_dict["image_url"] = None
     
     # Calculate comments count
     issue_dict["comments_count"] = len(issue.comments) if getattr(issue, 'comments', None) is not None else 0
@@ -77,6 +75,14 @@ def create_issue(db: Session, issue_in: IssueCreate, reporter_id: int) -> dict:
         remarks="Issue newly reported via mobile app."
     )
     db.add(history_obj)
+    # Create the image record if an image was uploaded
+    if issue_in.image_url:
+        image_obj = IssueImage(
+            issue_id=db_obj.id,
+            image_url=issue_in.image_url
+        )
+        db.add(image_obj)
+        
     db.commit()
 
     return format_issue(db_obj)
@@ -88,6 +94,7 @@ def get_issues(
     query = db.query(Issue).options(
         joinedload(Issue.category), 
         joinedload(Issue.reporter),
+        selectinload(Issue.images),
         selectinload(Issue.comments)
     )
 
@@ -112,6 +119,7 @@ def get_user_issues(db: Session, user_id: int, skip: int = 0, limit: int = 100) 
     query = db.query(Issue).options(
         joinedload(Issue.category), 
         joinedload(Issue.reporter),
+        selectinload(Issue.images),
         selectinload(Issue.comments)
     ).filter(Issue.reporter_id == user_id).order_by(Issue.created_at.desc())
     
@@ -122,7 +130,12 @@ def get_issue(db: Session, issue_id: int) -> Optional[dict]:
     # Load everything needed for the detailed pop-up
     issue = (
         db.query(Issue)
-        .options(joinedload(Issue.category), joinedload(Issue.reporter))
+        .options(
+            joinedload(Issue.category), 
+            joinedload(Issue.reporter),
+            selectinload(Issue.images),
+            selectinload(Issue.comments)
+        )
         .filter(Issue.id == issue_id)
         .first()
     )

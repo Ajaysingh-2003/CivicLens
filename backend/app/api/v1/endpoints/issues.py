@@ -1,13 +1,69 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
+import uuid
 
 from app.api import deps
-from app.schemas.issue import IssueCreate, IssueResponse, IssueUpdateStatus, IssueMapResponse
-from app.services import issue_service
+from app.schemas.issue import IssueCreate, IssueResponse, IssueUpdateStatus, IssueMapResponse, IssueClassifyResponse
+from app.services import issue_service, storage_service, ai_service
 from app.models.user import User
+from app.models.category import Category
 
 router = APIRouter()
+
+@router.post("/classify", response_model=IssueClassifyResponse)
+async def classify_issue_image(
+    file: UploadFile = File(...),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    (Mobile App) AI-Assisted Incident Classification.
+    Uploads the image to temporary storage, analyzes it against the DB categories using CLIP,
+    and returns a suggested category ID.
+    """
+    # 1. Upload to Cloudflare R2 temporarily
+    file_bytes = await file.read()
+    temp_filename = f"temp/{uuid.uuid4()}_{file.filename}"
+    
+    image_url = storage_service.upload_file(
+        file_bytes=file_bytes,
+        filename=temp_filename,
+        content_type=file.content_type
+    )
+    if not image_url:
+        raise HTTPException(status_code=500, detail="Failed to upload image temporarily")
+
+    # 2. Get active categories from DB
+    categories = db.query(Category).all()
+    if not categories:
+        raise HTTPException(status_code=500, detail="No categories configured in DB")
+        
+    category_names = [c.name for c in categories]
+    
+    # 3. Classify the image
+    try:
+        suggested_name = ai_service.classify_image(file_bytes, category_names)
+    except Exception as e:
+        # Fallback gracefully if AI fails, default to first category (e.g. Other)
+        print(f"AI Classification Failed: {e}")
+        suggested_name = category_names[-1] # Usually "Other" is at the end
+        
+    suggested_category = next(c for c in categories if c.name == suggested_name)
+
+    return IssueClassifyResponse(
+        image_url=image_url,
+        suggested_category_id=suggested_category.id,
+        suggested_category_name=suggested_category.name
+    )
+
+@router.get("/categories")
+def read_categories(db: Session = Depends(deps.get_db)) -> Any:
+    """
+    Get all active categories for the dropdown.
+    """
+    categories = db.query(Category).all()
+    return [{"id": c.id, "name": c.name, "description": c.description, "marker_color": c.marker_color} for c in categories]
 
 @router.get("/map", response_model=List[IssueMapResponse])
 def read_issues_map(

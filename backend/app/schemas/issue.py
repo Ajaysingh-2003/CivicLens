@@ -12,6 +12,7 @@ class IssueBase(BaseModel):
 class IssueCreate(IssueBase):
     lat: float = Field(..., description="Latitude from mobile phone GPS (-90 to 90)")
     lng: float = Field(..., description="Longitude from mobile phone GPS (-180 to 180)")
+    image_url: Optional[str] = None
 
 class IssueUpdateStatus(BaseModel):
     status: IssueStatus
@@ -49,3 +50,7 @@ class IssueResponse(IssueBase):
     class Config:
         from_attributes = True
 
+class IssueClassifyResponse(BaseModel):
+    image_url: str
+    suggested_category_id: int
+    suggested_category_name: str

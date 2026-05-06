@@ -211,5 +211,63 @@ export const api = {
       throw new Error(errorData?.detail || "Failed to remove avatar");
     }
     return res.json();
+  },
+
+  classifyIssueImage: async (imageUri: string) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const filename = imageUri.split('/').pop() || 'issue.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : `image`;
+
+    const formData = new FormData();
+    // @ts-ignore
+    formData.append('file', { uri: imageUri, name: filename, type });
+
+    const res = await fetch(`${API_URL}/issues/classify`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "multipart/form-data",
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Failed to classify image");
+    }
+    return res.json();
+  },
+
+  createIssue: async (title: string, description: string, category_id: number, lat: number, lng: number, image_url: string) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/issues/`, {
+      method: "POST",
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        title,
+        description,
+        category_id,
+        lat,
+        lng,
+        priority: "MEDIUM",
+        image_url
+      })
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Failed to submit report");
+    }
+    return res.json();
+  },
+  
+  getCategories: async () => {
+    const res = await fetch(`${API_URL}/issues/categories`);
+    if (!res.ok) throw new Error("Failed to fetch categories");
+    return res.json();
   }
 };
