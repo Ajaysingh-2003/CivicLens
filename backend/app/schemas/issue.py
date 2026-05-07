@@ -6,7 +6,6 @@ from app.models.issue import IssuePriority, IssueStatus
 class IssueBase(BaseModel):
     title: str = Field(..., max_length=150)
     description: str
-    priority: IssuePriority = IssuePriority.MEDIUM
     category_id: int
 
 class IssueCreate(IssueBase):
@@ -34,11 +33,13 @@ class IssueMapResponse(BaseModel):
 class IssueResponse(IssueBase):
     id: int
     status: IssueStatus
+    priority: IssuePriority
     upvotes: int
     downvotes: int
     created_at: datetime
     updated_at: Optional[datetime]
     reporter_id: int
+    city_id: Optional[int] = None
     lat: float
     lng: float
     category_name: str

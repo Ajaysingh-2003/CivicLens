@@ -58,6 +58,27 @@ def upload_avatar(file: UploadFile, user_id: int) -> str:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
 
+def upload_file(file_bytes: bytes, filename: str, content_type: str) -> str:
+    """
+    Generic file upload to Cloudflare R2.
+    """
+    if not settings.R2_BUCKET_NAME or not settings.R2_PUBLIC_URL:
+        raise HTTPException(status_code=500, detail="Storage configuration missing")
+
+    try:
+        s3_client.put_object(
+            Bucket=settings.R2_BUCKET_NAME,
+            Key=filename,
+            Body=file_bytes,
+            ContentType=content_type
+        )
+        
+        base_url = settings.R2_PUBLIC_URL.rstrip('/')
+        return f"{base_url}/{filename}"
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
+
 def delete_avatar(avatar_url: str):
     """
     Deletes the avatar object from Cloudflare R2 given its public URL.

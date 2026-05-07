@@ -2,12 +2,12 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func
 from geoalchemy2.shape import to_shape
-from app.models.issue import Issue, IssueStatus
+from app.models.issue import Issue, IssueStatus, IssuePriority
 from app.models.issue_history import IssueHistory
 from app.models.category import Category
 from app.models.user import User
 from app.models.issue_image import IssueImage
-import random
+from app.models.city import City
 from app.schemas.issue import IssueCreate, IssueUpdateStatus
 
 def format_issue(issue: Issue) -> Dict[str, Any]:
@@ -48,16 +48,22 @@ def format_issue(issue: Issue) -> Dict[str, Any]:
 
 def create_issue(db: Session, issue_in: IssueCreate, reporter_id: int) -> dict:
     # Convert lat/lng into a PostGIS EWKT SRID 4326 string
-    # PostGIS usually expects (Longitude Latitude)
     wkt_geom = f"SRID=4326;POINT({issue_in.lng} {issue_in.lat})"
+    
+    # Reverse Geocode: Find intersecting city using PostGIS ORM
+    city = db.query(City).filter(
+        func.ST_Contains(City.geom, func.ST_GeomFromText(wkt_geom, 4326))
+    ).first()
+    city_id = city.id if city else None
     
     db_obj = Issue(
         title=issue_in.title,
         description=issue_in.description,
         status=IssueStatus.PENDING,
-        priority=issue_in.priority,
+        priority=IssuePriority.LOW, # Default to LOW until upvoted
         category_id=issue_in.category_id,
         reporter_id=reporter_id,
+        city_id=city_id,
         geom=wkt_geom,
         upvotes=0,
         downvotes=0
@@ -85,7 +91,8 @@ def create_issue(db: Session, issue_in: IssueCreate, reporter_id: int) -> dict:
         
     db.commit()
 
-    return format_issue(db_obj)
+    # Reload with eager-loaded relationships for proper response formatting
+    return get_issue(db, db_obj.id)
 
 def get_issues(
     db: Session, skip: int = 0, limit: int = 100, lat: Optional[float] = None, lng: Optional[float] = None, radius_km: float = 5.0
@@ -169,4 +176,60 @@ def update_issue_status(
     db.refresh(issue)
     
     return format_issue(issue)
+
+from app.models.issue_vote import IssueVote
+
+def vote_issue(db: Session, issue_id: int, user_id: int, vote_type: int) -> Optional[dict]:
+    """Handles upvoting/downvoting and dynamic priority escalation."""
+    issue = db.query(Issue).filter(Issue.id == issue_id).first()
+    if not issue:
+        return None
+
+    # Check for existing vote
+    existing_vote = db.query(IssueVote).filter(
+        IssueVote.issue_id == issue_id, 
+        IssueVote.user_id == user_id
+    ).first()
+
+    if existing_vote:
+        if existing_vote.vote_type == vote_type:
+            # Same vote, do nothing or maybe remove vote (toggle logic). 
+            # For simplicity, we just return current state if it's the exact same vote.
+            return format_issue(issue)
+        
+        # Changing vote (e.g., from downvote to upvote)
+        if existing_vote.vote_type == 1:
+            issue.upvotes -= 1
+        elif existing_vote.vote_type == -1:
+            issue.downvotes -= 1
+
+        existing_vote.vote_type = vote_type
+        if vote_type == 1:
+            issue.upvotes += 1
+        elif vote_type == -1:
+            issue.downvotes += 1
+    else:
+        # New vote
+        new_vote = IssueVote(issue_id=issue_id, user_id=user_id, vote_type=vote_type)
+        db.add(new_vote)
+        if vote_type == 1:
+            issue.upvotes += 1
+        elif vote_type == -1:
+            issue.downvotes += 1
+
+    # Dynamic Priority Logic based on net votes
+    net_votes = issue.upvotes - issue.downvotes
+    if net_votes >= 100:
+        issue.priority = IssuePriority.CRITICAL
+    elif net_votes >= 50:
+        issue.priority = IssuePriority.HIGH
+    elif net_votes >= 10:
+        issue.priority = IssuePriority.MEDIUM
+    else:
+        issue.priority = IssuePriority.LOW
+
+    db.commit()
+    
+    # Reload with relations for proper formatting
+    return get_issue(db, issue_id)
 

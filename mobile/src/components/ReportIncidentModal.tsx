@@ -22,6 +22,7 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
   // Final Form Data
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -66,8 +67,10 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
 
   const handleConfirmAI = (isCorrect: boolean) => {
     if (isCorrect) {
+      setShowDropdown(false);
       setStep('DETAILS');
     } else {
+      setShowDropdown(true);
       setSelectedCategoryId(null);
       setTitle('');
       setStep('DETAILS');
@@ -82,7 +85,6 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
 
     setSubmitting(true);
     try {
-      // Get GPS
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Location permission is required to submit a report.');
@@ -117,6 +119,11 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
+          {step === 'DETAILS' && (
+            <TouchableOpacity onPress={() => setStep('CONFIRM')} style={styles.backBtn}>
+              <Ionicons name="arrow-back" size={24} color="#333" />
+            </TouchableOpacity>
+          )}
           <Text style={styles.headerTitle}>Report Incident</Text>
           {step !== 'ANALYZING' && !submitting && (
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -126,64 +133,85 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {imageUri && (
+          {imageUri && step !== 'ANALYZING' && (
             <Image source={{ uri: imageUri }} style={styles.previewImage} />
           )}
 
           {step === 'ANALYZING' && (
             <View style={styles.analyzingContainer}>
+              {imageUri && <Image source={{ uri: imageUri }} style={[styles.previewImage, { opacity: 0.5 }]} />}
               <ActivityIndicator size="large" color="#4CAF50" style={{ marginBottom: 16 }} />
-              <Text style={styles.analyzingTitle}>Analyzing with AI...</Text>
-              <Text style={styles.analyzingSubtext}>Our CLIP model is identifying the issue.</Text>
+              <Text style={styles.analyzingTitle}>Identifying issue...</Text>
+              <Text style={styles.analyzingSubtext}>Analyzing community infrastructure details to provide accurate reporting.</Text>
             </View>
           )}
 
           {step === 'CONFIRM' && (
             <View style={styles.confirmContainer}>
+              <Text style={{fontSize: 20, fontWeight: '700', marginBottom: 16, color: '#333'}}>Official Record</Text>
               <View style={styles.aiResultCard}>
-                <Ionicons name="sparkles" size={24} color="#4CAF50" style={{ marginBottom: 8 }} />
-                <Text style={styles.aiResultText}>It looks like a</Text>
+                <Ionicons name="checkmark-circle" size={32} color="#4CAF50" style={{ marginBottom: 8 }} />
+                <Text style={styles.aiResultText}>We've identified this as a:</Text>
                 <Text style={styles.aiCategoryText}>{suggestedCategoryName}</Text>
               </View>
 
               <Text style={styles.promptText}>Is this correct?</Text>
               
               <TouchableOpacity style={styles.btnPrimary} onPress={() => handleConfirmAI(true)}>
-                <Text style={styles.btnPrimaryText}>Yes, that's right</Text>
+                <Text style={styles.btnPrimaryText}>Yes, this is correct</Text>
               </TouchableOpacity>
               
-              <TouchableOpacity style={styles.btnSecondary} onPress={() => handleConfirmAI(false)}>
-                <Text style={styles.btnSecondaryText}>No, let me change it</Text>
+              <TouchableOpacity style={styles.btnSecondaryGreen} onPress={() => handleConfirmAI(false)}>
+                <Text style={styles.btnSecondaryGreenText}>No, let me choose</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {step === 'DETAILS' && (
             <View style={styles.detailsContainer}>
-              <Text style={styles.label}>Category</Text>
-              <View style={styles.categoryGrid}>
-                {categories.map(cat => (
-                  <TouchableOpacity 
-                    key={cat.id} 
-                    style={[styles.categoryPill, selectedCategoryId === cat.id && styles.categoryPillActive]}
-                    onPress={() => setSelectedCategoryId(cat.id)}
-                  >
-                    <Text style={[styles.categoryPillText, selectedCategoryId === cat.id && styles.categoryPillTextActive]}>
-                      {cat.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <Text style={{fontSize: 20, fontWeight: '700', marginBottom: 4, color: '#333'}}>Final Submission</Text>
+              <Text style={{fontSize: 14, color: '#666', marginBottom: 16, lineHeight: 20}}>
+                This report will be tagged with your current GPS location and sent directly to the Public Works Department for review.
+              </Text>
+              
+              {!showDropdown && (
+                <View style={styles.badgeWrapper}>
+                  <View style={styles.categoryBadge}>
+                    <Ionicons name="pricetag" size={14} color="#4CAF50" style={{marginRight: 4}}/>
+                    <Text style={styles.categoryBadgeText}>{suggestedCategoryName}</Text>
+                  </View>
+                </View>
+              )}
 
-              <Text style={styles.label}>Title</Text>
+              {showDropdown && (
+                <>
+                  <Text style={styles.label}>Select Category</Text>
+                  <View style={styles.categoryGrid}>
+                    {categories.map(cat => (
+                      <TouchableOpacity 
+                        key={cat.id} 
+                        style={[styles.categoryPill, selectedCategoryId === cat.id && styles.categoryPillActive]}
+                        onPress={() => setSelectedCategoryId(cat.id)}
+                      >
+                        <Text style={[styles.categoryPillText, selectedCategoryId === cat.id && styles.categoryPillTextActive]}>
+                          {cat.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              <Text style={styles.label}>Title <Text style={{color: 'red'}}>*</Text></Text>
               <TextInput 
                 style={styles.input} 
                 value={title} 
                 onChangeText={setTitle} 
                 placeholder="Brief description of the issue"
+                maxLength={50}
               />
 
-              <Text style={styles.label}>Description</Text>
+              <Text style={styles.label}>Description <Text style={{color: 'red'}}>*</Text></Text>
               <TextInput 
                 style={[styles.input, styles.textArea]} 
                 value={description} 
@@ -191,6 +219,7 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
                 placeholder="Provide any helpful details for the city..."
                 multiline
                 numberOfLines={4}
+                maxLength={300}
               />
 
               <TouchableOpacity 
@@ -324,8 +353,46 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
   },
+  btnSecondaryGreen: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  btnSecondaryGreenText: {
+    color: '#4CAF50',
+    fontWeight: '600',
+    fontSize: 16,
+  },
   detailsContainer: {
     width: '100%',
+  },
+  badgeWrapper: {
+    alignItems: 'flex-end',
+    marginBottom: 8,
+  },
+  categoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2FCEE',
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  categoryBadgeText: {
+    color: '#00480f',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  backBtn: {
+    position: 'absolute',
+    left: 16,
+    padding: 4,
   },
   label: {
     fontSize: 15,

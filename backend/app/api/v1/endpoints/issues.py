@@ -148,3 +148,21 @@ def update_issue_status(
         raise HTTPException(status_code=404, detail="Issue not found")
     return issue
 
+@router.post("/{issue_id}/vote", response_model=IssueResponse)
+def vote_on_issue(
+    *,
+    db: Session = Depends(deps.get_db),
+    issue_id: int,
+    vote_type: int, # 1 for upvote, -1 for downvote
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    (Mobile App / Web App) Upvote or downvote an issue.
+    """
+    if vote_type not in [1, -1]:
+        raise HTTPException(status_code=400, detail="Invalid vote_type. Must be 1 or -1.")
+        
+    issue = issue_service.vote_issue(db, issue_id=issue_id, user_id=current_user.id, vote_type=vote_type)
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return issue

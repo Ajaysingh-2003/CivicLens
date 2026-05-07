@@ -253,7 +253,6 @@ export const api = {
         category_id,
         lat,
         lng,
-        priority: "MEDIUM",
         image_url
       })
     });
