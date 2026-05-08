@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, StatusBar, ActivityIndicator, Alert, Modal } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Image,
+  Dimensions, StatusBar, ActivityIndicator, Alert, Modal, RefreshControl,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -10,851 +13,519 @@ import ReportIncidentModal from '../components/ReportIncidentModal';
 
 const { width } = Dimensions.get('window');
 
-// Time formatter
 const formatTime = (dateString: string) => {
   const date = new Date(dateString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
-  const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-  if (diffHrs < 24) return `${diffHrs} hours ago`;
-  const diffDays = Math.floor(diffHrs / 24);
-  return `${diffDays} days ago`;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24) return `${diffHrs}h ago`;
+  return `${Math.floor(diffHrs / 24)}d ago`;
 };
+
+type ActiveView = 'Feed' | 'MyReports' | 'Profile';
 
 export default function HomeScreen() {
   const { user, login, logout } = useAuth();
-  
-  // Navigation State
-  const [activeSegment, setActiveSegment] = useState('Feed'); // 'Feed' | 'Map'
-  const [activeBottomNav, setActiveBottomNav] = useState('Feed'); // 'Feed' | 'My Reports' | 'Profile'
-  
-  // Data State
+
+  const [activeView, setActiveView] = useState<ActiveView>('Feed');
   const [issues, setIssues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Profile specific states
+  // Profile / Avatar states
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [isAvatarModalVisible, setAvatarModalVisible] = useState(false);
 
-  // Report Incident Modal State
+  // Report modal
   const [isReportModalVisible, setReportModalVisible] = useState(false);
   const [reportImageUri, setReportImageUri] = useState<string | null>(null);
 
-  const loadIssues = async () => {
+  const loadIssues = useCallback(async (view: ActiveView = activeView) => {
     setLoading(true);
     try {
-      if (activeBottomNav === 'Feed') {
-        const data = await api.getIssues(); // Add GPS coordinates here eventually
+      if (view === 'Feed') {
+        const data = await api.getIssues();
         setIssues(data);
-      } else if (activeBottomNav === 'My Reports') {
+      } else if (view === 'MyReports') {
         const data = await api.getMyIssues();
         setIssues(data);
       }
     } catch (err: any) {
-      console.log('Error Loading Issues:', err);
+      console.log('Error loading issues:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeView]);
 
   useEffect(() => {
-    if (activeBottomNav === 'Feed' || activeBottomNav === 'My Reports') {
-      loadIssues();
+    if (activeView === 'Feed' || activeView === 'MyReports') {
+      loadIssues(activeView);
     }
-  }, [activeBottomNav]);
+  }, [activeView]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (activeView === 'Feed') {
+        const data = await api.getIssues();
+        setIssues(data);
+      } else if (activeView === 'MyReports') {
+        const data = await api.getMyIssues();
+        setIssues(data);
+      }
+    } catch (err) {
+      console.log('Refresh error:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [activeView]);
+
+  const handleReportIncident = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Camera permission is required to report an issue.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets?.length > 0) {
+        setReportImageUri(result.assets[0].uri);
+        setReportModalVisible(true);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to launch camera');
+    }
+  };
 
   const handlePickImage = async (useCamera: boolean) => {
     try {
       if (useCamera) {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Sorry, we need camera permissions to make this work!');
-          return;
-        }
+        if (status !== 'granted') { Alert.alert('Permission needed', 'Camera permission required.'); return; }
       } else {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
-          return;
+        if (status !== 'granted') { Alert.alert('Permission needed', 'Photo library permission required.'); return; }
+      }
+      const result = useCamera
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+
+      if (!result.canceled && result.assets?.length > 0) {
+        setUploadingAvatar(true);
+        try {
+          const updatedUser = await api.uploadAvatar(result.assets[0].uri);
+          const token = await AsyncStorage.getItem('access_token');
+          if (token) await login(token, updatedUser);
+          Alert.alert('Success', 'Avatar updated!');
+        } catch (err: any) {
+          Alert.alert('Error', err.message || 'Failed to upload avatar');
+        } finally {
+          setUploadingAvatar(false);
         }
       }
-
-      const options: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ImagePicker.MediaTypeOptions.Images, // STRICTLY IMAGES ONLY
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      };
-
-      const result = useCamera 
-        ? await ImagePicker.launchCameraAsync(options)
-        : await ImagePicker.launchImageLibraryAsync(options);
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        await uploadImage(result.assets[0].uri);
-      }
     } catch (error) {
-      console.error(error);
       Alert.alert('Error', 'Failed to pick image');
     } finally {
       setAvatarModalVisible(false);
     }
   };
 
-  const showImagePickerOptions = () => {
-    setAvatarModalVisible(true);
-  };
-
-  const uploadImage = async (uri: string) => {
-    setUploadingAvatar(true);
-    try {
-      const updatedUser = await api.uploadAvatar(uri);
-      
-      const token = await AsyncStorage.getItem('access_token');
-      if (token) {
-          await login(token, updatedUser);
-      }
-      Alert.alert("Success", "Avatar updated successfully!");
-    } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to upload avatar");
-    } finally {
-      setUploadingAvatar(false);
-    }
-  };
-
   const handleAvatarRemove = async () => {
+    setAvatarModalVisible(false);
     try {
       setUploadingAvatar(true);
       const updatedUser = await api.removeAvatar();
-      
       const token = await AsyncStorage.getItem('access_token');
-      if (token) {
-          await login(token, updatedUser);
-      }
-      Alert.alert("Success", "Avatar removed successfully!");
+      if (token) await login(token, updatedUser);
+      Alert.alert('Success', 'Avatar removed.');
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to remove avatar");
+      Alert.alert('Error', err.message || 'Failed to remove avatar');
     } finally {
       setUploadingAvatar(false);
     }
   };
 
-  const handleReportIncident = async () => {
-    try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Sorry, we need camera permissions to make this work!');
-        return;
-      }
-
-      const options: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        quality: 0.8,
-      };
-
-      const result = await ImagePicker.launchCameraAsync(options);
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setReportImageUri(result.assets[0].uri);
-        setReportModalVisible(true);
-      }
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Failed to launch camera');
-    }
-  };
-
-  const displayName = user?.name || user?.full_name || 'Jane Doe';
+  const displayName = user?.name || user?.full_name || 'Citizen';
   const displayTitle = user?.title || 'Level 1: Citizen Explorer';
-  const avatarUrl = user?.avatar_url || 'https://i.pravatar.cc/150?u=fallback';
-  
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      
-      {/* 1. Header Segment */}
-      <View style={styles.header}>
-        <View style={styles.headerTextGroup}>
-          <Text style={styles.greeting}>{activeBottomNav === 'Profile' ? 'Account' : `Hello, ${displayName}`}</Text>
-          {activeBottomNav !== 'Profile' && (
-            <View style={styles.titleRow}>
-              <Ionicons name="star" size={12} color="#4CAF50" />
-              <Text style={styles.gamifiedTitle}>{displayTitle} • {user?.points || 0} pts</Text>
+  const avatarUrl = user?.avatar_url || `https://i.pravatar.cc/150?u=${user?.id || 'fallback'}`;
+  const pointsPct = Math.min(((user?.points || 0) / 1000) * 100, 100);
+
+  // ─── HEADER ──────────────────────────────────────────────────────────────────
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <View style={styles.headerLeft}>
+        {activeView === 'Profile' ? (
+          <TouchableOpacity onPress={() => setActiveView('Feed')} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={22} color="#333" />
+          </TouchableOpacity>
+        ) : activeView === 'MyReports' ? (
+          <TouchableOpacity onPress={() => setActiveView('Profile')} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={22} color="#333" />
+          </TouchableOpacity>
+        ) : null}
+        <View>
+          <Text style={styles.greeting}>
+            {activeView === 'Profile' ? 'Account' : activeView === 'MyReports' ? 'My Reports' : `Hello, ${displayName.split(' ')[0]}`}
+          </Text>
+          {activeView === 'Feed' && (
+            <View style={styles.levelRow}>
+              <Ionicons name="star" size={11} color="#4CAF50" />
+              <Text style={styles.levelText}>{displayTitle} • {user?.points || 0} pts</Text>
             </View>
           )}
-          {activeBottomNav !== 'Profile' && (
+          {activeView === 'Feed' && (
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: '70%' }]} />
+              <View style={[styles.progressFill, { width: `${pointsPct}%` as any }]} />
             </View>
           )}
         </View>
-        {activeBottomNav !== 'Profile' && (
-          <TouchableOpacity style={styles.avatarButton} onPress={() => setActiveBottomNav('Profile')}>
-            <Image 
-              source={{ uri: avatarUrl }} 
-              style={styles.avatarImage} 
-            />
-          </TouchableOpacity>
-        )}
+      </View>
+      {activeView !== 'Profile' && (
+        <TouchableOpacity onPress={() => setActiveView('Profile')} style={styles.avatarBtn}>
+          <Image source={{ uri: avatarUrl }} style={styles.avatarImg} />
+          {uploadingAvatar && (
+            <View style={styles.avatarOverlay}>
+              <ActivityIndicator size="small" color="#fff" />
+            </View>
+          )}
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  // ─── ISSUE CARD ───────────────────────────────────────────────────────────────
+  const renderCard = (issue: any) => (
+    <View key={issue.id} style={styles.card}>
+      <View style={styles.cardMeta}>
+        <View style={styles.cardMetaLeft}>
+          <View style={[styles.categoryDot, { backgroundColor: issue.category_color || '#4CAF50' }]} />
+          <Text style={styles.cardMetaText}>{issue.reporter_name || 'Anonymous'}</Text>
+          <Text style={styles.cardMetaDivider}>·</Text>
+          <Text style={styles.cardMetaText}>{formatTime(issue.created_at)}</Text>
+        </View>
+        <View style={[styles.categoryChip, { borderColor: issue.category_color || '#4CAF50' }]}>
+          <Text style={[styles.categoryChipText, { color: issue.category_color || '#4CAF50' }]}>
+            {issue.category_name || 'General'}
+          </Text>
+        </View>
       </View>
 
-      {/* Main Display Area Based on Navigation */}
-      {activeBottomNav === 'Profile' ? (
-        <ScrollView style={styles.profileContainer} contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
-          
-          <View style={styles.profileHeader}>
-            <TouchableOpacity onPress={showImagePickerOptions} style={styles.profileAvatarWrapper}>
-              <Image source={{ uri: avatarUrl }} style={styles.profileLargeAvatar} />
-              <View style={styles.cameraBadge}>
-                <Ionicons name="camera" size={16} color="#ffffff" />
-              </View>
-            </TouchableOpacity>
-            <Text style={styles.profileName}>{displayName}</Text>
-            <Text style={styles.profileMeta}>{user?.email}</Text>
-          </View>
-
-          <View style={styles.pointsCard}>
-            <View style={styles.pointsHeader}>
-              <Text style={styles.pointsTitle}>Citizen Points</Text>
-              <Text style={styles.pointsValue}>{user?.points || 0} / 1000</Text>
-            </View>
-            <View style={styles.progressTrackLarge}>
-              <View style={[styles.progressFillLarge, { width: `${Math.min(((user?.points || 0)/1000)*100, 100)}%` }]} />
-            </View>
-            <Text style={styles.pointsSubtext}>Impact Level: {displayTitle}</Text>
-          </View>
-
-          <View style={styles.settingsGroup}>
-            <TouchableOpacity style={styles.settingsRow} onPress={() => setActiveBottomNav('My Reports')}>
-              <View style={styles.settingsIconWrapper}>
-                <Ionicons name="clipboard-outline" size={20} color="#4CAF50" />
-              </View>
-              <Text style={styles.settingsText}>My Reports</Text>
-              <Ionicons name="chevron-forward" size={20} color="#acadad" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.settingsRow}>
-              <View style={styles.settingsIconWrapper}>
-                <Ionicons name="person-outline" size={20} color="#4CAF50" />
-              </View>
-              <Text style={styles.settingsText}>Account Details</Text>
-              <Ionicons name="chevron-forward" size={20} color="#acadad" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.settingsRow}>
-              <View style={styles.settingsIconWrapper}>
-                <Ionicons name="notifications-outline" size={20} color="#4CAF50" />
-              </View>
-              <Text style={styles.settingsText}>Notifications</Text>
-              <Ionicons name="chevron-forward" size={20} color="#acadad" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.settingsRow}>
-              <View style={styles.settingsIconWrapper}>
-                <Ionicons name="shield-checkmark-outline" size={20} color="#4CAF50" />
-              </View>
-              <Text style={styles.settingsText}>Privacy & Security</Text>
-              <Ionicons name="chevron-forward" size={20} color="#acadad" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.settingsRow}>
-              <View style={styles.settingsIconWrapper}>
-                <Ionicons name="help-circle-outline" size={20} color="#4CAF50" />
-              </View>
-              <Text style={styles.settingsText}>Help & Support</Text>
-              <Ionicons name="chevron-forward" size={20} color="#acadad" />
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity style={styles.btnDanger} onPress={logout}>
-            <Text style={styles.btnDangerText}>Logout Account</Text>
-          </TouchableOpacity>
-
-        </ScrollView>
-      ) : (
-        <>
-          {/* Segmented Control for Feed / Map */}
-          {activeBottomNav === 'Feed' && (
-            <View style={styles.segmentContainer}>
-              <TouchableOpacity 
-                style={[styles.segmentButton, activeSegment === 'Feed' && styles.segmentActive]}
-                onPress={() => setActiveSegment('Feed')}
-              >
-                <Text style={[styles.segmentText, activeSegment === 'Feed' && styles.segmentTextActive]}>Feed</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.segmentButton, activeSegment === 'Map' && styles.segmentActive]}
-                onPress={() => setActiveSegment('Map')}
-              >
-                <Text style={[styles.segmentText, activeSegment === 'Map' && styles.segmentTextActive]}>Map</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {activeBottomNav === 'My Reports' && (
-            <View style={{ padding: 20, paddingBottom: 0 }}>
-              <Text style={{ fontSize: 22, fontWeight: '700' }}>Your Reports</Text>
-            </View>
-          )}
-
-          {/* Issue List */}
-          {loading ? (
-            <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
-               <ActivityIndicator size="large" color="#4CAF50" />
-            </View>
-          ) : (
-            <ScrollView style={styles.feedContainer} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-              {issues.length === 0 ? (
-                <Text style={{ textAlign: 'center', marginTop: 40, color: '#888' }}>No issues found.</Text>
-              ) : (
-                issues.map(issue => (
-                  <View key={issue.id} style={styles.card}>
-                    
-                    <View style={styles.cardHeader}>
-                      <Text style={styles.cardMeta}><Ionicons name="person-outline" size={12} /> {issue.reporter_name || 'Anonymous'} • {formatTime(issue.created_at)}</Text>
-                    </View>
-
-                    {issue.image_url && (
-                      <View style={styles.imageContainer}>
-                        <Image source={{ uri: issue.image_url }} style={styles.cardImage} />
-                        <View style={[styles.statusPill, { backgroundColor: issue.category_color }]}>
-                          <Text style={styles.statusText}>{issue.status}</Text>
-                        </View>
-                      </View>
-                    )}
-
-                    <View style={styles.cardBody}>
-                      <Text style={styles.cardTitle}>{issue.title}</Text>
-                      <Text style={styles.cardDesc} numberOfLines={2}>{issue.description}</Text>
-                    </View>
-
-                    <View style={styles.cardFooter}>
-                      <TouchableOpacity style={styles.actionBtn}>
-                        <Ionicons name="caret-up-outline" size={20} color="#666" />
-                        <Text style={styles.actionText}>{issue.upvotes}</Text>
-                        <Ionicons name="caret-down-outline" size={20} color="#666" />
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.actionBtn}>
-                        <Ionicons name="chatbubble-outline" size={18} color="#666" />
-                        <Text style={[styles.actionText, { marginLeft: 6 }]}>{issue.comments_count}</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                  </View>
-                ))
-              )}
-            </ScrollView>
-          )}
-        </>
+      {issue.image_url && (
+        <Image source={{ uri: issue.image_url }} style={styles.cardImage} />
       )}
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => setActiveBottomNav('Feed')}>
-          <Ionicons name={activeBottomNav === 'Feed' ? "compass" : "compass-outline"} size={26} color={activeBottomNav === 'Feed' ? "#4CAF50" : "#838485"} />
-          <Text style={[styles.navText, activeBottomNav === 'Feed' && { color: '#4CAF50' }]}>Feed</Text>
-        </TouchableOpacity>
-
-        <View style={styles.fabWrapper}>
-          <TouchableOpacity style={styles.fab} onPress={handleReportIncident}>
-            <Ionicons name="camera" size={28} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity style={styles.navItem} onPress={() => setActiveBottomNav('My Reports')}>
-          <Ionicons name={activeBottomNav === 'My Reports' ? "clipboard" : "clipboard-outline"} size={26} color={activeBottomNav === 'My Reports' ? "#4CAF50" : "#838485"} />
-          <Text style={[styles.navText, activeBottomNav === 'My Reports' && { color: '#4CAF50' }]}>My Reports</Text>
-        </TouchableOpacity>
+      <View style={styles.cardBody}>
+        <Text style={styles.cardTitle} numberOfLines={2}>{issue.title}</Text>
+        <Text style={styles.cardDesc} numberOfLines={2}>{issue.description}</Text>
       </View>
 
-      {/* Avatar Actions Modal */}
-      <Modal visible={isAvatarModalVisible} transparent={true} animationType="fade">
+      <View style={styles.cardFooter}>
+        <TouchableOpacity style={styles.voteBtn}>
+          <Ionicons name="caret-up" size={18} color="#4CAF50" />
+          <Text style={styles.voteBtnText}>{issue.upvotes}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.voteBtn}>
+          <Ionicons name="caret-down" size={18} color="#aaa" />
+          <Text style={[styles.voteBtnText, { color: '#aaa' }]}>{issue.downvotes}</Text>
+        </TouchableOpacity>
+        <View style={styles.commentBtn}>
+          <Ionicons name="chatbubble-outline" size={16} color="#888" />
+          <Text style={styles.commentBtnText}>{issue.comments_count}</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  // ─── FEED / MY REPORTS ────────────────────────────────────────────────────────
+  const renderFeed = () => (
+    <>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.feed}
+          contentContainerStyle={{ paddingBottom: 120, paddingTop: 8 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4CAF50" />}
+        >
+          {issues.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="leaf-outline" size={48} color="#ccc" />
+              <Text style={styles.emptyStateText}>No issues reported yet.</Text>
+              <Text style={styles.emptyStateSubText}>Be the first to report one!</Text>
+            </View>
+          ) : (
+            issues.map(renderCard)
+          )}
+        </ScrollView>
+      )}
+
+      {/* Centered FAB */}
+      <View style={styles.fabContainer} pointerEvents="box-none">
+        <TouchableOpacity style={styles.fab} onPress={handleReportIncident} activeOpacity={0.85}>
+          <Ionicons name="camera" size={28} color="#ffffff" />
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
+  // ─── PROFILE ──────────────────────────────────────────────────────────────────
+  const renderProfile = () => (
+    <ScrollView style={styles.profileScroll} contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+      <View style={styles.profileHeader}>
+        <TouchableOpacity onPress={() => setAvatarModalVisible(true)} style={styles.profileAvatarWrapper}>
+          <Image source={{ uri: avatarUrl }} style={styles.profileAvatar} />
+          <View style={styles.cameraBadge}>
+            <Ionicons name="camera" size={14} color="#fff" />
+          </View>
+        </TouchableOpacity>
+        <Text style={styles.profileName}>{displayName}</Text>
+        <Text style={styles.profileEmail}>{user?.email}</Text>
+      </View>
+
+      <View style={styles.pointsCard}>
+        <View style={styles.pointsRow}>
+          <Text style={styles.pointsLabel}>Citizen Points</Text>
+          <Text style={styles.pointsValue}>{user?.points || 0} / 1000</Text>
+        </View>
+        <View style={styles.progressTrackLg}>
+          <View style={[styles.progressFillLg, { width: `${pointsPct}%` as any }]} />
+        </View>
+        <Text style={styles.pointsSub}>{displayTitle}</Text>
+      </View>
+
+      <View style={styles.settingsGroup}>
+        {[
+          { icon: 'clipboard-outline', label: 'My Reports', action: () => setActiveView('MyReports') },
+          { icon: 'person-outline', label: 'Account Details', action: () => {} },
+          { icon: 'notifications-outline', label: 'Notifications', action: () => {} },
+          { icon: 'shield-checkmark-outline', label: 'Privacy & Security', action: () => {} },
+          { icon: 'help-circle-outline', label: 'Help & Support', action: () => {} },
+        ].map((item, i) => (
+          <TouchableOpacity key={i} style={styles.settingsRow} onPress={item.action}>
+            <View style={styles.settingsIcon}>
+              <Ionicons name={item.icon as any} size={20} color="#4CAF50" />
+            </View>
+            <Text style={styles.settingsLabel}>{item.label}</Text>
+            <Ionicons name="chevron-forward" size={18} color="#ccc" />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+        <Text style={styles.logoutText}>Logout Account</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FAFAFA" />
+      {renderHeader()}
+      <View style={styles.main}>
+        {activeView === 'Profile' ? renderProfile() : renderFeed()}
+      </View>
+
+      {/* Avatar Modal */}
+      <Modal visible={isAvatarModalVisible} transparent animationType="fade" onRequestClose={() => setAvatarModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Update Avatar</Text>
-            <Text style={styles.modalSubtext}>Choose how you want to update your profile photo.</Text>
-            
-            <TouchableOpacity style={styles.btnModalPrimary} onPress={() => handlePickImage(false)} disabled={uploadingAvatar}>
-              <Text style={styles.btnModalPrimaryText}>{uploadingAvatar ? "Uploading..." : "Upload New Avatar"}</Text>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Update Photo</Text>
+            <Text style={styles.modalSubtext}>Choose how to update your profile photo.</Text>
+            <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => handlePickImage(false)} disabled={uploadingAvatar}>
+              <Text style={styles.modalPrimaryText}>{uploadingAvatar ? 'Uploading...' : 'Choose from Library'}</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.btnModalPrimary} onPress={() => handlePickImage(true)} disabled={uploadingAvatar}>
-              <Text style={styles.btnModalPrimaryText}>{uploadingAvatar ? "Uploading..." : "Take Photo"}</Text>
+            <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => handlePickImage(true)} disabled={uploadingAvatar}>
+              <Text style={styles.modalPrimaryText}>Take Photo</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.btnModalSecondary} onPress={() => { handleAvatarRemove(); setAvatarModalVisible(false); }}>
-              <Text style={styles.btnModalSecondaryText}>Remove Avatar</Text>
+            <TouchableOpacity style={styles.modalSecondaryBtn} onPress={handleAvatarRemove}>
+              <Text style={styles.modalSecondaryText}>Remove Photo</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.btnModalCancel} onPress={() => setAvatarModalVisible(false)}>
-              <Text style={styles.btnModalCancelText}>Cancel</Text>
+            <TouchableOpacity onPress={() => setAvatarModalVisible(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
+      {/* Report Modal */}
       <ReportIncidentModal
         visible={isReportModalVisible}
         imageUri={reportImageUri}
-        onClose={() => {
-          setReportModalVisible(false);
-          setReportImageUri(null);
-        }}
+        onClose={() => { setReportModalVisible(false); setReportImageUri(null); }}
         onSuccess={() => {
           setReportModalVisible(false);
           setReportImageUri(null);
-          setActiveBottomNav('My Reports'); // Switch to reports tab to see it
-          loadIssues();
+          loadIssues('Feed');
         }}
       />
-
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-  },
-  
+  safe: { flex: 1, backgroundColor: '#FAFAFA' },
+  main: { flex: 1 },
+
   // Header
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
-    backgroundColor: '#ffffff',
-  },
-  headerTextGroup: {
-    flex: 1,
-  },
-  greeting: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#333333',
-    letterSpacing: -0.5,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  gamifiedTitle: {
-    fontSize: 13,
-    color: '#666666',
-    marginLeft: 4,
-    fontWeight: '600',
-  },
-  progressTrack: {
-    height: 4,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 2,
-    width: 140,
-    marginTop: 6,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#4CAF50',
-    borderRadius: 2,
-  },
-  avatarButton: {
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#eee',
-  },
-
-  // Segment
-  segmentContainer: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    marginTop: 12,
-    marginBottom: 8,
-    backgroundColor: '#EEEEEE',
-    borderRadius: 8,
-    padding: 4,
-  },
-  segmentButton: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 6,
-  },
-  segmentActive: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  segmentText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#888888',
-  },
-  segmentTextActive: {
-    color: '#4CAF50',
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  backButton: { marginRight: 12, padding: 2 },
+  greeting: { fontSize: 22, fontWeight: '800', color: '#191c1d', letterSpacing: -0.5 },
+  levelRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
+  levelText: { fontSize: 12, color: '#666', fontWeight: '600', marginLeft: 4 },
+  progressTrack: { height: 3, backgroundColor: '#E8E8E8', borderRadius: 2, width: 120, marginTop: 5, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: '#4CAF50', borderRadius: 2 },
+  avatarBtn: { marginLeft: 12 },
+  avatarImg: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#eee' },
+  avatarOverlay: {
+    ...StyleSheet.absoluteFillObject, borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center',
   },
 
   // Feed
-  feedContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
+  feed: { flex: 1, paddingHorizontal: 16 },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  // Empty State
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
+  emptyStateText: { fontSize: 18, fontWeight: '700', color: '#bbb', marginTop: 16 },
+  emptyStateSubText: { fontSize: 14, color: '#ccc', marginTop: 6 },
+
+  // Card
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 16,
     overflow: 'hidden',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    shadowColor: '#191c1d', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   cardMeta: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10,
   },
-  cardDistance: {
-    fontSize: 12,
-    color: '#006399',
-    fontWeight: '600',
+  cardMetaLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  categoryDot: { width: 8, height: 8, borderRadius: 4 },
+  cardMetaText: { fontSize: 13, color: '#555', fontWeight: '500' },
+  cardMetaDivider: { fontSize: 13, color: '#bbb' },
+  categoryChip: {
+    borderWidth: 1, borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 3,
   },
-  imageContainer: {
-    width: '100%',
-    height: 180,
-    position: 'relative',
-  },
-  cardImage: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#eee',
-  },
-  statusPill: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  statusText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  cardBody: {
-    padding: 16,
-    paddingBottom: 8,
-  },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#333333',
-    marginBottom: 4,
-  },
-  cardDesc: {
-    fontSize: 14,
-    color: '#666666',
-    lineHeight: 20,
-  },
+  categoryChipText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+  cardImage: { width: '100%', height: 190, backgroundColor: '#f0f0f0' },
+  cardBody: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: '#191c1d', marginBottom: 4, letterSpacing: -0.2 },
+  cardDesc: { fontSize: 14, color: '#666', lineHeight: 20 },
   cardFooter: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderTopWidth: 1, borderTopColor: '#F5F5F5', gap: 12,
   },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 24,
-    backgroundColor: '#F8F8F8',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  voteBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#F8F8F8', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
   },
-  actionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
-    marginHorizontal: 4,
+  voteBtnText: { fontSize: 13, fontWeight: '700', color: '#4CAF50' },
+  commentBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, marginLeft: 'auto',
   },
+  commentBtnText: { fontSize: 13, color: '#888', fontWeight: '500' },
 
-  // Bottom Nav
-  bottomNav: {
-    position: 'absolute',
-    bottom: 0,
-    width: width,
-    height: 85,
-    backgroundColor: '#ffffff',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 40,
-    borderTopWidth: 1,
-    borderTopColor: '#EEEEEE',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: -4 },
-  },
-  navItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 15, // Lifted for home bar
-  },
-  navText: {
-    fontSize: 11,
-    marginTop: 4,
-    fontWeight: '600',
-    color: '#838485',
-  },
-  fabWrapper: {
-    position: 'absolute',
-    top: -24,
-    left: (width / 2) - 32, // Centered
-    alignItems: 'center',
-    justifyContent: 'center',
+  // FAB
+  fabContainer: {
+    position: 'absolute', bottom: 28, left: 0, right: 0,
+    alignItems: 'center', justifyContent: 'center',
+    pointerEvents: 'box-none',
   },
   fab: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 68, height: 68, borderRadius: 34,
     backgroundColor: '#4CAF50',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#4CAF50',
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#4CAF50', shadowOpacity: 0.45, shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
   },
-  // Profile specific styles
-  profileContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 32,
-  },
-  profileHeader: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  profileAvatarWrapper: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  profileLargeAvatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#eee',
-  },
+
+  // Profile
+  profileScroll: { flex: 1, paddingHorizontal: 20, paddingTop: 24 },
+  profileHeader: { alignItems: 'center', marginBottom: 28 },
+  profileAvatarWrapper: { position: 'relative', marginBottom: 14 },
+  profileAvatar: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#eee' },
   cameraBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#4CAF50',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#FAFAFA',
+    position: 'absolute', bottom: 0, right: 0,
+    backgroundColor: '#4CAF50', width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#FAFAFA',
   },
-  profileName: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#333333',
-    marginBottom: 4,
-  },
-  profileMeta: {
-    fontSize: 14,
-    color: '#888888',
-    fontWeight: '500',
-  },
+  profileName: { fontSize: 20, fontWeight: '800', color: '#191c1d', marginBottom: 4 },
+  profileEmail: { fontSize: 13, color: '#888', fontWeight: '500' },
+
+  // Points Card
   pointsCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 32,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 24,
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
   },
-  pointsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  pointsTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#333333',
-  },
-  pointsValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#4CAF50',
-  },
-  progressTrackLarge: {
-    height: 8,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 4,
-    width: '100%',
-    marginBottom: 12,
-    overflow: 'hidden',
-  },
-  progressFillLarge: {
-    height: '100%',
-    backgroundColor: '#4CAF50',
-    borderRadius: 4,
-  },
-  pointsSubtext: {
-    fontSize: 13,
-    color: '#888888',
-    fontWeight: '500',
-  },
+  pointsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  pointsLabel: { fontSize: 14, fontWeight: '700', color: '#333' },
+  pointsValue: { fontSize: 14, fontWeight: '700', color: '#4CAF50' },
+  progressTrackLg: { height: 7, backgroundColor: '#F0F0F0', borderRadius: 4, overflow: 'hidden', marginBottom: 10 },
+  progressFillLg: { height: '100%', backgroundColor: '#4CAF50', borderRadius: 4 },
+  pointsSub: { fontSize: 12, color: '#888', fontWeight: '500' },
+
+  // Settings
   settingsGroup: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    marginBottom: 32,
-    shadowColor: '#000',
-    shadowOpacity: 0.02,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    backgroundColor: '#fff', borderRadius: 16, marginBottom: 24,
+    shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1,
     overflow: 'hidden',
   },
   settingsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f5f5f5',
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 15, paddingHorizontal: 16,
+    borderBottomWidth: 1, borderBottomColor: '#F8F8F8',
   },
-  settingsIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F2FCEE',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
+  settingsIcon: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: '#F2FCF2', alignItems: 'center', justifyContent: 'center', marginRight: 14,
   },
-  settingsText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333333',
-  },
-  btnDanger: {
-    width: '100%',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFF5F5',
-    marginBottom: 20,
-  },
-  btnDangerText: {
-    color: '#FF3B30',
-    fontWeight: '700',
-    fontSize: 16,
-  },
+  settingsLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: '#333' },
 
-  // Modal Styles
+  // Logout
+  logoutBtn: {
+    backgroundColor: '#FFF5F5', borderRadius: 14,
+    paddingVertical: 16, alignItems: 'center', marginBottom: 8,
+  },
+  logoutText: { color: '#FF3B30', fontWeight: '700', fontSize: 15 },
+
+  // Modal
   modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center', alignItems: 'center', padding: 20,
   },
-  modalContent: {
-    backgroundColor: '#ffffff',
-    width: '100%',
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
+  modalCard: { backgroundColor: '#fff', width: '100%', borderRadius: 24, padding: 28, alignItems: 'center' },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#333', marginBottom: 6 },
+  modalSubtext: { fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  modalPrimaryBtn: {
+    width: '100%', backgroundColor: '#4CAF50', paddingVertical: 15,
+    borderRadius: 12, alignItems: 'center', marginBottom: 10,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#333333',
-    marginBottom: 8,
+  modalPrimaryText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  modalSecondaryBtn: {
+    width: '100%', backgroundColor: '#F2F2F7', paddingVertical: 15,
+    borderRadius: 12, alignItems: 'center', marginBottom: 20,
   },
-  modalSubtext: {
-    fontSize: 14,
-    color: '#666666',
-    textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 20,
-  },
-  btnModalPrimary: {
-    width: '100%',
-    backgroundColor: '#4CAF50',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  btnModalPrimaryText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  btnModalSecondary: {
-    width: '100%',
-    backgroundColor: '#F2F2F7',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  btnModalSecondaryText: {
-    color: '#333333',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  btnModalCancel: {
-    width: '100%',
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  btnModalCancelText: {
-    color: '#888888',
-    fontWeight: '600',
-    fontSize: 16,
-  }
+  modalSecondaryText: { color: '#333', fontWeight: '700', fontSize: 15 },
+  modalCancelText: { color: '#999', fontWeight: '600', fontSize: 15 },
 });
