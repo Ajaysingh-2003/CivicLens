@@ -5,7 +5,9 @@ import { Picker } from '@react-native-picker/picker';
 import { api } from '../services/api';
 
 export default function RegisterScreen({ navigation }: any) {
-  const [fullName, setFullName] = useState('');
+  const today = new Date();
+  const dateStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+  const [username, setUsername] = useState(`Citizen-${dateStr}-${Math.floor(Math.random() * 9999) + 1}`);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -40,7 +42,7 @@ export default function RegisterScreen({ navigation }: any) {
   }, [selectedState]);
 
   const handleRegister = async () => {
-    if (!fullName || !email || !password || !selectedState || !selectedCity) {
+    if (!username || !email || !password || !selectedState || !selectedCity) {
       setError("Please fill out all required fields.");
       return;
     }
@@ -67,7 +69,7 @@ export default function RegisterScreen({ navigation }: any) {
       await api.register(
         email,
         password,
-        fullName,
+        username,
         role,
         Number(selectedState),
         Number(selectedCity),
@@ -110,11 +112,12 @@ export default function RegisterScreen({ navigation }: any) {
         ) : null}
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Full Name *</Text>
+          <Text style={styles.label}>Username *</Text>
           <View style={styles.inputbox}>
             <Ionicons name="person-outline" size={20} color="#666" style={styles.icon} />
-            <TextInput style={styles.input} placeholder="e.g. Jane Doe" value={fullName} onChangeText={setFullName} />
+            <TextInput style={styles.input} placeholder="e.g. Citizen-20260510-42" value={username} onChangeText={setUsername} autoCapitalize="none" />
           </View>
+          <Text style={styles.fieldHint}>Auto-generated for your privacy. Feel free to change it!</Text>
         </View>
 
         <View style={styles.fieldGroup}>
@@ -306,5 +309,11 @@ const styles = StyleSheet.create({
   linkText: {
     color: '#4CAF50',
     fontWeight: 'bold',
+  },
+  fieldHint: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 6,
+    marginLeft: 2,
   },
 });

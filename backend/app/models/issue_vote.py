@@ -6,8 +6,8 @@ class IssueVote(Base):
     __tablename__ = "issue_votes"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    issue_id = Column(Integer, ForeignKey("issues.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    issue_id = Column(Integer, ForeignKey("issues.id", ondelete="CASCADE"), nullable=False)
     vote_type = Column(Integer, nullable=False) # e.g. 1 for upvote, -1 for downvote
 
     __table_args__ = (

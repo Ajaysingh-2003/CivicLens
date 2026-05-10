@@ -8,6 +8,32 @@ import { api } from '../services/api';
 export default function ProfileScreen({ navigation }: any) {
   const { user, login, logout } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [viewState, setViewState] = useState<'Menu' | 'Details'>('Menu');
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "Are you absolutely sure you want to delete your account? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete My Account", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await api.deleteAccount();
+              await logout();
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to delete account");
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const handlePickImage = async (useCamera: boolean) => {
     try {
@@ -114,7 +140,7 @@ export default function ProfileScreen({ navigation }: any) {
             <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.placeholderAvatar]}>
-              <Text style={styles.placeholderText}>{user.name?.charAt(0).toUpperCase() || 'U'}</Text>
+              <Text style={styles.placeholderText}>{user.username?.charAt(0).toUpperCase() || 'U'}</Text>
             </View>
           )}
           
@@ -123,7 +149,7 @@ export default function ProfileScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
         
-        <Text style={styles.name}>{user.name}</Text>
+        <Text style={styles.name}>{user.username}</Text>
         <Text style={styles.email}>{user.email}</Text>
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>{user.role.replace('_', ' ')}</Text>
@@ -131,23 +157,64 @@ export default function ProfileScreen({ navigation }: any) {
       </View>
 
       <View style={styles.section}>
-        <TouchableOpacity style={styles.menuItem} onPress={() => {}}>
-          <Ionicons name="person-outline" size={24} color="#666" />
-          <Text style={styles.menuText}>Account Details</Text>
-          <Ionicons name="chevron-forward" size={24} color="#ccc" />
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.menuItem} onPress={() => {}}>
-          <Ionicons name="settings-outline" size={24} color="#666" />
-          <Text style={styles.menuText}>Settings</Text>
-          <Ionicons name="chevron-forward" size={24} color="#ccc" />
-        </TouchableOpacity>
-      </View>
+        {viewState === 'Menu' ? (
+          <>
+            <TouchableOpacity style={styles.menuItem} onPress={() => setViewState('Details')}>
+              <Ionicons name="person-outline" size={24} color="#666" />
+              <Text style={styles.menuText}>Account Details</Text>
+              <Ionicons name="chevron-forward" size={24} color="#ccc" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.menuItem} onPress={() => {}}>
+              <Ionicons name="settings-outline" size={24} color="#666" />
+              <Text style={styles.menuText}>Settings</Text>
+              <Ionicons name="chevron-forward" size={24} color="#ccc" />
+            </TouchableOpacity>
 
-      <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-        <Ionicons name="log-out-outline" size={20} color="#D32F2F" />
-        <Text style={styles.logoutText}>Log Out</Text>
-      </TouchableOpacity>
+            <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+              <Ionicons name="log-out-outline" size={20} color="#D32F2F" />
+              <Text style={styles.logoutText}>Log Out</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <View style={styles.detailsContainer}>
+            <TouchableOpacity style={styles.backButton} onPress={() => setViewState('Menu')}>
+              <Ionicons name="arrow-back" size={20} color="#333" />
+              <Text style={styles.backButtonText}>Back to Menu</Text>
+            </TouchableOpacity>
+
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Username</Text>
+              <Text style={styles.detailValue}>{user.username}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Email</Text>
+              <Text style={styles.detailValue}>{user.email}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Role</Text>
+              <Text style={styles.detailValue}>{user.role.replace('_', ' ')}</Text>
+            </View>
+            {user.city_id && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>City ID</Text>
+                <Text style={styles.detailValue}>{user.city_id}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity style={[styles.logoutButton, { marginTop: 40 }]} onPress={handleDeleteAccount} disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="#D32F2F" />
+              ) : (
+                <>
+                  <Ionicons name="trash-outline" size={20} color="#D32F2F" />
+                  <Text style={styles.logoutText}>Delete Account</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -260,5 +327,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  detailsContainer: {
+    padding: 24,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: '#333',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  detailLabel: {
+    fontSize: 16,
+    color: '#666',
+  },
+  detailValue: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
   },
 });

@@ -7,8 +7,8 @@ class IssueHistory(Base):
     __tablename__ = "issue_history"
 
     id = Column(Integer, primary_key=True, index=True)
-    issue_id = Column(Integer, ForeignKey("issues.id"), nullable=False)
-    actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    issue_id = Column(Integer, ForeignKey("issues.id", ondelete="CASCADE"), nullable=False)
+    actor_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
     old_status = Column(String, nullable=True)
     new_status = Column(String, nullable=False)

@@ -32,8 +32,10 @@ def format_issue(issue: Issue) -> Dict[str, Any]:
         issue_dict["category_color"] = "#64748b" # Default grey
 
     # Add Actor Info
-    if issue.reporter:
-        issue_dict["reporter_name"] = issue.reporter.name
+    if getattr(issue, 'reporter', None):
+        issue_dict["reporter_name"] = issue.reporter.username
+    else:
+        issue_dict["reporter_name"] = "Deleted User"
         
     # Image URL
     if getattr(issue, 'images', None) and len(issue.images) > 0:
@@ -176,6 +178,15 @@ def update_issue_status(
     db.refresh(issue)
     
     return format_issue(issue)
+
+def delete_issue(db: Session, issue_id: int) -> bool:
+    issue = db.query(Issue).filter(Issue.id == issue_id).first()
+    if not issue:
+        return False
+    db.delete(issue)
+    db.commit()
+    return True
+
 
 from app.models.issue_vote import IssueVote
 

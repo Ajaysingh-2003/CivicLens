@@ -38,7 +38,7 @@ class Issue(Base):
 
     # Foreign Keys
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
-    reporter_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    reporter_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     city_id = Column(Integer, ForeignKey("cities.id"), nullable=True) # Nullable for older issues migration
 
     # Relationships
@@ -46,8 +46,8 @@ class Issue(Base):
     reporter = relationship("User", back_populates="issues_reported")
     city = relationship("City", back_populates="issues")
     
-    images = relationship("IssueImage", back_populates="issue")
-    votes = relationship("IssueVote", back_populates="issue")
-    assignments = relationship("Assignment", back_populates="issue")
-    history = relationship("IssueHistory", back_populates="issue")
-    comments = relationship("Comment", back_populates="issue")
+    images = relationship("IssueImage", back_populates="issue", cascade="all, delete-orphan")
+    votes = relationship("IssueVote", back_populates="issue", cascade="all, delete-orphan")
+    assignments = relationship("Assignment", back_populates="issue", cascade="all, delete-orphan")
+    history = relationship("IssueHistory", back_populates="issue", cascade="all, delete-orphan")
+    comments = relationship("Comment", back_populates="issue", cascade="all, delete-orphan")

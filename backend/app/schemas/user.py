@@ -5,11 +5,14 @@ from app.models.user import UserRole
 # Shared properties
 class UserBase(BaseModel):
     email: EmailStr
-    full_name: Optional[str] = Field(None, alias="full_name")
+    username: str
     role: UserRole = UserRole.CITIZEN # Default role
 
 # Properties to receive via API on creation
-class UserCreate(UserBase):
+class UserCreate(BaseModel):
+    email: EmailStr
+    username: Optional[str] = None  # If None, backend auto-generates
+    role: UserRole = UserRole.CITIZEN
     password: str
     state_id: Optional[int] = None
     city_id: Optional[int] = None
@@ -21,7 +24,6 @@ class UserResponse(UserBase):
     is_active: bool
     points: int
     title: str
-    name: Optional[str] = None
     avatar_url: Optional[str] = None
 
     class Config:

@@ -144,3 +144,19 @@ def remove_avatar(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+@router.delete("/me")
+def delete_user_me(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """Deletes the currently authenticated user account."""
+    if current_user.avatar_url:
+        storage_service.delete_avatar(current_user.avatar_url)
+        
+    success = user_service.delete_user(db, current_user.id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete user account")
+        
+    return {"status": "success", "message": "User account deleted"}
+

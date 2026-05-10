@@ -24,7 +24,7 @@ const formatTime = (dateString: string) => {
   return `${Math.floor(diffHrs / 24)}d ago`;
 };
 
-type ActiveView = 'Feed' | 'MyReports' | 'Profile';
+type ActiveView = 'Feed' | 'MyReports' | 'Profile' | 'AccountDetails';
 
 export default function HomeScreen() {
   const { user, login, logout } = useAuth();
@@ -151,7 +151,29 @@ export default function HomeScreen() {
     }
   };
 
-  const displayName = user?.name || user?.full_name || 'Citizen';
+  const handleDeleteIssue = (issueId: number) => {
+    Alert.alert(
+      "Delete Post",
+      "Are you sure you want to delete this report?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.deleteIssue(issueId);
+              fetchMyReports(); // refresh the list
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to delete issue");
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const displayName = user?.username || 'Citizen';
   const displayTitle = user?.title || 'Level 1: Citizen Explorer';
   const avatarUrl = user?.avatar_url || `https://i.pravatar.cc/150?u=${user?.id || 'fallback'}`;
   const pointsPct = Math.min(((user?.points || 0) / 1000) * 100, 100);
@@ -160,8 +182,8 @@ export default function HomeScreen() {
   const renderHeader = () => (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
-        {activeView === 'Profile' ? (
-          <TouchableOpacity onPress={() => setActiveView('Feed')} style={styles.backButton}>
+        {activeView === 'Profile' || activeView === 'AccountDetails' ? (
+          <TouchableOpacity onPress={() => setActiveView(activeView === 'AccountDetails' ? 'Profile' : 'Feed')} style={styles.backButton}>
             <Ionicons name="arrow-back" size={22} color="#333" />
           </TouchableOpacity>
         ) : activeView === 'MyReports' ? (
@@ -171,7 +193,7 @@ export default function HomeScreen() {
         ) : null}
         <View>
           <Text style={styles.greeting}>
-            {activeView === 'Profile' ? 'Account' : activeView === 'MyReports' ? 'My Reports' : `Hello, ${displayName.split(' ')[0]}`}
+            {activeView === 'Profile' ? 'Account' : activeView === 'MyReports' ? 'My Reports' : activeView === 'AccountDetails' ? 'Account Details' : `Hello, ${displayName}`}
           </Text>
           {activeView === 'Feed' && (
             <View style={styles.levelRow}>
@@ -201,7 +223,16 @@ export default function HomeScreen() {
 
   // ─── ISSUE CARD ───────────────────────────────────────────────────────────────
   const renderCard = (issue: any) => (
-    <View key={issue.id} style={styles.card}>
+    <TouchableOpacity 
+      key={issue.id} 
+      style={styles.card}
+      activeOpacity={0.9}
+      onLongPress={() => {
+        if (activeView === 'MyReports') {
+          handleDeleteIssue(issue.id);
+        }
+      }}
+    >
       <View style={styles.cardMeta}>
         <View style={styles.cardMetaLeft}>
           <View style={[styles.categoryDot, { backgroundColor: issue.category_color || '#4CAF50' }]} />
@@ -239,7 +270,7 @@ export default function HomeScreen() {
           <Text style={styles.commentBtnText}>{issue.comments_count}</Text>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   // ─── FEED / MY REPORTS ────────────────────────────────────────────────────────
@@ -277,6 +308,53 @@ export default function HomeScreen() {
     </>
   );
 
+  // ─── ACCOUNT DETAILS ──────────────────────────────────────────────────────────
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "Are you absolutely sure? This action cannot be undone. Your reported issues will remain visible as 'Deleted User'.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete My Account",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.deleteAccount();
+              await logout();
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to delete account");
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const renderAccountDetails = () => (
+    <ScrollView style={styles.profileScroll} contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+      <View style={styles.detailSection}>
+        {[
+          { label: 'Username', value: user?.username || '—' },
+          { label: 'Email', value: user?.email || '—' },
+          { label: 'Role', value: user?.role?.replace('_', ' ') || '—' },
+          { label: 'Citizen Points', value: String(user?.points ?? 0) },
+          { label: 'Title', value: user?.title || '—' },
+        ].map((row, i) => (
+          <View key={i} style={styles.detailRow}>
+            <Text style={styles.detailLabel}>{row.label}</Text>
+            <Text style={styles.detailValue}>{row.value}</Text>
+          </View>
+        ))}
+      </View>
+
+      <TouchableOpacity style={styles.deleteAccountBtn} onPress={handleDeleteAccount}>
+        <Ionicons name="trash-outline" size={18} color="#D32F2F" />
+        <Text style={styles.deleteAccountText}>Delete Account</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+
   // ─── PROFILE ──────────────────────────────────────────────────────────────────
   const renderProfile = () => (
     <ScrollView style={styles.profileScroll} contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
@@ -305,7 +383,7 @@ export default function HomeScreen() {
       <View style={styles.settingsGroup}>
         {[
           { icon: 'clipboard-outline', label: 'My Reports', action: () => setActiveView('MyReports') },
-          { icon: 'person-outline', label: 'Account Details', action: () => {} },
+          { icon: 'person-outline', label: 'Account Details', action: () => setActiveView('AccountDetails') },
           { icon: 'notifications-outline', label: 'Notifications', action: () => {} },
           { icon: 'shield-checkmark-outline', label: 'Privacy & Security', action: () => {} },
           { icon: 'help-circle-outline', label: 'Help & Support', action: () => {} },
@@ -331,7 +409,7 @@ export default function HomeScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#FAFAFA" />
       {renderHeader()}
       <View style={styles.main}>
-        {activeView === 'Profile' ? renderProfile() : renderFeed()}
+        {activeView === 'Profile' ? renderProfile() : activeView === 'AccountDetails' ? renderAccountDetails() : renderFeed()}
       </View>
 
       {/* Avatar Modal */}
@@ -528,4 +606,26 @@ const styles = StyleSheet.create({
   },
   modalSecondaryText: { color: '#333', fontWeight: '700', fontSize: 15 },
   modalCancelText: { color: '#999', fontWeight: '600', fontSize: 15 },
+
+  // Account Details
+  detailSection: {
+    backgroundColor: '#fff', borderRadius: 16, marginHorizontal: 16, marginTop: 16,
+    overflow: 'hidden',
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  detailRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: '#F2F2F7',
+  },
+  detailLabel: { fontSize: 15, color: '#888', fontWeight: '500' },
+  detailValue: { fontSize: 15, color: '#191c1d', fontWeight: '600', maxWidth: '60%', textAlign: 'right' },
+  deleteAccountBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    marginHorizontal: 16, marginTop: 32, paddingVertical: 16,
+    backgroundColor: '#fff1f0', borderRadius: 14,
+    borderWidth: 1, borderColor: '#ffdad6',
+  },
+  deleteAccountText: { color: '#D32F2F', fontSize: 15, fontWeight: '700', marginLeft: 8 },
 });

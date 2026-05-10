@@ -26,7 +26,7 @@ export const api = {
   register: async (
     email: string,
     password: string,
-    fullName: string,
+    username: string,
     role: string,
     stateId?: number,
     cityId?: number,
@@ -38,7 +38,7 @@ export const api = {
       body: JSON.stringify({
         email,
         password,
-        full_name: fullName,
+        username: username,
         role,
         state_id: stateId || null,
         city_id: cityId || null,
@@ -267,6 +267,36 @@ export const api = {
   getCategories: async () => {
     const res = await fetch(`${API_URL}/issues/categories`);
     if (!res.ok) throw new Error("Failed to fetch categories");
+    return res.json();
+  },
+  
+  deleteAccount: async () => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/users/me`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Failed to delete account");
+    }
+    return res.json();
+  },
+  
+  deleteIssue: async (issueId: number) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/issues/${issueId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Failed to delete issue");
+    }
     return res.json();
   }
 };

@@ -166,3 +166,26 @@ def vote_on_issue(
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
     return issue
+
+@router.delete("/{issue_id}")
+def delete_issue(
+    issue_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Delete a specific issue. Only the reporter can delete their issue.
+    """
+    issue = issue_service.get_issue(db, issue_id=issue_id)
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+        
+    if issue.get("reporter_id") != current_user.id and current_user.role.name not in ["SUPER_ADMIN", "GOVT_OFFICIAL"]:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+        
+    success = issue_service.delete_issue(db, issue_id=issue_id)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete issue")
+        
+    return {"status": "success", "message": "Issue deleted"}
+

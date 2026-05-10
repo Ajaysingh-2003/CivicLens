@@ -8,7 +8,7 @@ class Comment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     issue_id = Column(Integer, ForeignKey("issues.id"), nullable=False)
-    author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    author_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
     content = Column(String, nullable=False)
     is_internal = Column(Boolean, default=False)
