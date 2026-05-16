@@ -18,6 +18,8 @@ class UserCreate(BaseModel):
     city_id: Optional[int] = None
     department_id: Optional[int] = None
 
+from datetime import datetime
+
 # Properties to return to client (Notice no hashed_password here!)
 class UserResponse(UserBase):
     id: int
@@ -25,6 +27,20 @@ class UserResponse(UserBase):
     points: int
     title: str
     avatar_url: Optional[str] = None
+    created_at: Optional[datetime] = None
+    notifications_enabled: bool
 
     class Config:
         from_attributes = True
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    notifications_enabled: Optional[bool] = None
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+    otp_code: str

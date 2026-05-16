@@ -160,3 +160,66 @@ def delete_user_me(
         
     return {"status": "success", "message": "User account deleted"}
 
+from app.schemas.user import UserUpdate, PasswordChange, PasswordChangeRequest
+from app.core.security import verify_password, get_password_hash
+
+@router.put("/me", response_model=UserResponse)
+def update_user_me(
+    data: UserUpdate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """Update username or preferences."""
+    if data.username is not None and data.username != current_user.username:
+        # Check uniqueness
+        existing = db.query(User).filter(User.username == data.username).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Username is already taken")
+        current_user.username = data.username
+        
+    if data.notifications_enabled is not None:
+        current_user.notifications_enabled = data.notifications_enabled
+        
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+@router.post("/me/password/request-otp")
+@limiter.limit("3/minute")
+def request_password_change_otp(
+    request: Request,
+    data: PasswordChangeRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """Validate current password and send OTP to user's email."""
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+        
+    try:
+        otp_code = otp_service.generate_and_store_otp(current_user.email, purpose="password_change")
+        email_service.send_otp_email(current_user.email, otp_code, purpose="password_change")
+        return {"status": "success", "message": "OTP sent to email"}
+    except ValueError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+
+@router.put("/me/password")
+@limiter.limit("5/minute")
+def change_password(
+    request: Request,
+    data: PasswordChange,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """Verify OTP and current password, then change password."""
+    if not verify_password(data.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+        
+    is_valid = otp_service.verify_otp(current_user.email, "password_change", data.otp_code)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+        
+    current_user.hashed_password = get_password_hash(data.new_password)
+    db.commit()
+    
+    return {"status": "success", "message": "Password updated successfully"}

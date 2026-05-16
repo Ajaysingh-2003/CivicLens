@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import { Platform } from 'react-native';
 // In physical device development, this must be the actual LAN IP of your computer running the FastAPI backend.
 // We observed 192.168.1.7 in your Metro logs, so we'll default to that!
 const API_URL = "http://192.168.1.7:8000/api/v1";
@@ -104,12 +104,26 @@ export const api = {
     return res.json();
   },
 
-  uploadAvatar: async () => {
-    // For now this is mocked on the backend, so we don't actually need to send a formData file.
+  uploadAvatar: async (uri: string) => {
     const token = await AsyncStorage.getItem("access_token");
+    const formData = new FormData();
+    const filename = uri.split('/').pop() || 'avatar.jpg';
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : `image`;
+
+    formData.append('file', {
+      uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+      name: filename,
+      type
+    } as any);
+
     const res = await fetch(`${API_URL}/users/me/avatar`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data',
+      },
+      body: formData,
     });
     if (!res.ok) throw new Error("Failed to upload avatar");
     return res.json();
@@ -122,6 +136,57 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) throw new Error("Failed to remove avatar");
+    return res.json();
+  },
+
+  updateUserMe: async (data: { username?: string; notifications_enabled?: boolean }) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/users/me`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.detail || "Failed to update profile");
+    }
+    return res.json();
+  },
+
+  requestPasswordChangeOtp: async (data: { current_password: string }) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/users/me/password/request-otp`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}` 
+      },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.detail || "Failed to request OTP");
+    }
+    return res.json();
+  },
+
+  changePassword: async (data: any) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/users/me/password`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.detail || "Failed to change password");
+    }
     return res.json();
   },
 

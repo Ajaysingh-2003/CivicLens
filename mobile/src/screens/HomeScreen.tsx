@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image,
   Dimensions, StatusBar, ActivityIndicator, Alert, Modal, RefreshControl,
+  TextInput, Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,6 +42,20 @@ export default function HomeScreen() {
   // Report modal
   const [isReportModalVisible, setReportModalVisible] = useState(false);
   const [reportImageUri, setReportImageUri] = useState<string | null>(null);
+
+  // Account Details states
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [editUsernameText, setEditUsernameText] = useState(user?.username || '');
+  const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
+  const [passwordStep, setPasswordStep] = useState<1 | 2>(1);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordOtp, setPasswordOtp] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [updatingAccount, setUpdatingAccount] = useState(false);
 
   const loadIssues = useCallback(async (view: ActiveView = activeView) => {
     setLoading(true);
@@ -134,6 +149,21 @@ export default function HomeScreen() {
     } finally {
       setAvatarModalVisible(false);
     }
+  };
+
+  const handleChangePhotoPrompt = () => {
+    setAvatarModalVisible(false);
+    setTimeout(() => {
+      Alert.alert(
+        "Update Photo",
+        "Choose how to update your profile photo",
+        [
+          { text: "Take Photo", onPress: () => handlePickImage(true) },
+          { text: "Choose from Library", onPress: () => handlePickImage(false) },
+          { text: "Cancel", style: "cancel" }
+        ]
+      );
+    }, 300); // Slight delay so the modal closes smoothly before the alert pops up
   };
 
   const handleAvatarRemove = async () => {
@@ -331,21 +361,148 @@ export default function HomeScreen() {
     );
   };
 
+  const handleSaveUsername = async () => {
+    if (!editUsernameText.trim()) return;
+    setUpdatingAccount(true);
+    try {
+      const updated = await api.updateUserMe({ username: editUsernameText.trim() });
+      const token = await AsyncStorage.getItem('access_token');
+      if (token) await login(token, updated);
+      setIsEditingUsername(false);
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to update username");
+    } finally {
+      setUpdatingAccount(false);
+    }
+  };
+
+  const handleToggleNotifications = async (val: boolean) => {
+    setUpdatingAccount(true);
+    try {
+      const updated = await api.updateUserMe({ notifications_enabled: val });
+      const token = await AsyncStorage.getItem('access_token');
+      if (token) await login(token, updated);
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to update notifications");
+    } finally {
+      setUpdatingAccount(false);
+    }
+  };
+
+  const handleRequestPasswordOtp = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      Alert.alert("Error", "Please fill all password fields");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Error", "New passwords do not match");
+      return;
+    }
+    setUpdatingAccount(true);
+    try {
+      await api.requestPasswordChangeOtp({ current_password: currentPassword });
+      setPasswordStep(2);
+      Alert.alert("Success", "OTP sent to your email!");
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to send OTP");
+    } finally {
+      setUpdatingAccount(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!passwordOtp) {
+      Alert.alert("Error", "Please enter OTP");
+      return;
+    }
+    setUpdatingAccount(true);
+    try {
+      await api.changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+        otp_code: passwordOtp
+      });
+      Alert.alert("Success", "Password changed successfully!");
+      setIsPasswordModalVisible(false);
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword(''); setPasswordOtp(''); setPasswordStep(1);
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to change password");
+    } finally {
+      setUpdatingAccount(false);
+    }
+  };
+
   const renderAccountDetails = () => (
     <ScrollView style={styles.profileScroll} contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+      
+      {/* Member Since */}
+      <View style={styles.memberSinceContainer}>
+        <Ionicons name="calendar-outline" size={16} color="#666" />
+        <Text style={styles.memberSinceText}>
+          Member since {user?.created_at ? new Date(user.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'May 2026'}
+        </Text>
+      </View>
+
       <View style={styles.detailSection}>
-        {[
-          { label: 'Username', value: user?.username || '—' },
-          { label: 'Email', value: user?.email || '—' },
-          { label: 'Role', value: user?.role?.replace('_', ' ') || '—' },
-          { label: 'Citizen Points', value: String(user?.points ?? 0) },
-          { label: 'Title', value: user?.title || '—' },
-        ].map((row, i) => (
-          <View key={i} style={styles.detailRow}>
-            <Text style={styles.detailLabel}>{row.label}</Text>
-            <Text style={styles.detailValue}>{row.value}</Text>
+        {/* Username (Editable) */}
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Username</Text>
+          {isEditingUsername ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TextInput 
+                style={styles.editInput} 
+                value={editUsernameText} 
+                onChangeText={setEditUsernameText} 
+                autoCapitalize="none"
+              />
+              <TouchableOpacity onPress={handleSaveUsername} disabled={updatingAccount} style={{ marginLeft: 8 }}>
+                {updatingAccount ? <ActivityIndicator size="small" color="#4CAF50" /> : <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setIsEditingUsername(false); setEditUsernameText(user?.username || ''); }} style={{ marginLeft: 8 }}>
+                <Ionicons name="close-circle" size={24} color="#D32F2F" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={styles.detailValue}>{user?.username}</Text>
+              <TouchableOpacity onPress={() => setIsEditingUsername(true)} style={{ marginLeft: 8 }}>
+                <Ionicons name="pencil" size={16} color="#4CAF50" />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* Email (Locked) */}
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Email Address</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.detailValue, { color: '#888' }]}>{user?.email}</Text>
+            <Ionicons name="lock-closed" size={14} color="#ccc" style={{ marginLeft: 8 }} />
           </View>
-        ))}
+        </View>
+
+        {/* Change Password */}
+        <TouchableOpacity style={styles.detailRow} onPress={() => setIsPasswordModalVisible(true)}>
+          <Text style={[styles.detailLabel, { color: '#191c1d' }]}>Change Password</Text>
+          <Ionicons name="chevron-forward" size={18} color="#ccc" />
+        </TouchableOpacity>
+
+        {/* Notifications Toggle */}
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Area Notifications</Text>
+          <Switch 
+            value={user?.notifications_enabled ?? true}
+            onValueChange={handleToggleNotifications}
+            trackColor={{ false: '#e0e0e0', true: '#a5d6a7' }}
+            thumbColor={user?.notifications_enabled ? '#4CAF50' : '#f4f3f4'}
+            disabled={updatingAccount}
+          />
+        </View>
+
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Reputation Points</Text>
+          <Text style={styles.detailValue}>{user?.points ?? 0} pts</Text>
+        </View>
       </View>
 
       <TouchableOpacity style={styles.deleteAccountBtn} onPress={handleDeleteAccount}>
@@ -412,26 +569,86 @@ export default function HomeScreen() {
         {activeView === 'Profile' ? renderProfile() : activeView === 'AccountDetails' ? renderAccountDetails() : renderFeed()}
       </View>
 
-      {/* Avatar Modal */}
-      <Modal visible={isAvatarModalVisible} transparent animationType="fade" onRequestClose={() => setAvatarModalVisible(false)}>
+      {/* Password Modal */}
+      <Modal visible={isPasswordModalVisible} transparent animationType="slide" onRequestClose={() => setIsPasswordModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Update Photo</Text>
-            <Text style={styles.modalSubtext}>Choose how to update your profile photo.</Text>
-            <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => handlePickImage(false)} disabled={uploadingAvatar}>
-              <Text style={styles.modalPrimaryText}>{uploadingAvatar ? 'Uploading...' : 'Choose from Library'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalPrimaryBtn} onPress={() => handlePickImage(true)} disabled={uploadingAvatar}>
-              <Text style={styles.modalPrimaryText}>Take Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalSecondaryBtn} onPress={handleAvatarRemove}>
-              <Text style={styles.modalSecondaryText}>Remove Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setAvatarModalVisible(false)}>
+            <Text style={styles.modalTitle}>Change Password</Text>
+            {passwordStep === 1 ? (
+              <>
+                <Text style={styles.modalSubtext}>Enter your current and new password.</Text>
+                
+                <View style={styles.passwordInputContainer}>
+                  <TextInput style={styles.passwordInput} placeholder="Current Password" secureTextEntry={!showCurrentPassword} value={currentPassword} onChangeText={setCurrentPassword} />
+                  <TouchableOpacity onPress={() => setShowCurrentPassword(!showCurrentPassword)}>
+                    <Ionicons name={showCurrentPassword ? "eye-off" : "eye"} size={20} color="#888" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.passwordInputContainer}>
+                  <TextInput style={styles.passwordInput} placeholder="New Password" secureTextEntry={!showNewPassword} value={newPassword} onChangeText={setNewPassword} />
+                  <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)}>
+                    <Ionicons name={showNewPassword ? "eye-off" : "eye"} size={20} color="#888" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.passwordInputContainer}>
+                  <TextInput style={styles.passwordInput} placeholder="Confirm New Password" secureTextEntry={!showConfirmPassword} value={confirmPassword} onChangeText={setConfirmPassword} />
+                  <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                    <Ionicons name={showConfirmPassword ? "eye-off" : "eye"} size={20} color="#888" />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.modalPrimaryBtn} onPress={handleRequestPasswordOtp} disabled={updatingAccount}>
+                  {updatingAccount ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.modalPrimaryText}>Request OTP</Text>}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalSubtext}>Enter the OTP sent to your email.</Text>
+                <View style={styles.passwordInputContainer}>
+                  <TextInput style={styles.passwordInput} placeholder="OTP Code" value={passwordOtp} onChangeText={setPasswordOtp} keyboardType="number-pad" />
+                </View>
+                <TouchableOpacity style={styles.modalPrimaryBtn} onPress={handleChangePassword} disabled={updatingAccount}>
+                  {updatingAccount ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.modalPrimaryText}>Update Password</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity onPress={() => setIsPasswordModalVisible(false)} style={{ marginTop: 10 }}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      {/* Avatar Modal */}
+      <Modal visible={isAvatarModalVisible} transparent animationType="fade" onRequestClose={() => setAvatarModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlayDark} activeOpacity={1} onPress={() => setAvatarModalVisible(false)}>
+          
+          {/* Enlarged Avatar */}
+          <View style={styles.enlargedAvatarContainer}>
+            <Image source={{ uri: avatarUrl }} style={styles.enlargedAvatar} />
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.avatarActionsRow}>
+            {/* Change Photo */}
+            <View style={styles.avatarActionItem}>
+              <TouchableOpacity style={styles.avatarActionBtn} onPress={handleChangePhotoPrompt}>
+                <Ionicons name="camera-outline" size={26} color="#333" />
+              </TouchableOpacity>
+              <Text style={styles.avatarActionText}>Change Photo</Text>
+            </View>
+
+            {/* Delete Photo */}
+            <View style={styles.avatarActionItem}>
+              <TouchableOpacity style={[styles.avatarActionBtn, { borderColor: '#ffebee' }]} onPress={() => { setAvatarModalVisible(false); handleAvatarRemove(); }}>
+                <Ionicons name="trash-outline" size={26} color="#D32F2F" />
+              </TouchableOpacity>
+              <Text style={[styles.avatarActionText, { color: '#D32F2F' }]}>Delete Photo</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* Report Modal */}
@@ -588,24 +805,41 @@ const styles = StyleSheet.create({
   logoutText: { color: '#FF3B30', fontWeight: '700', fontSize: 15 },
 
   // Modal
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center', alignItems: 'center', padding: 20,
+  // Modal Overlay (Dark Blur Equivalent)
+  modalOverlayDark: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center', alignItems: 'center',
   },
-  modalCard: { backgroundColor: '#fff', width: '100%', borderRadius: 24, padding: 28, alignItems: 'center' },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#333', marginBottom: 6 },
-  modalSubtext: { fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
-  modalPrimaryBtn: {
-    width: '100%', backgroundColor: '#4CAF50', paddingVertical: 15,
-    borderRadius: 12, alignItems: 'center', marginBottom: 10,
+  enlargedAvatarContainer: {
+    marginBottom: 40,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10,
+    elevation: 10,
   },
-  modalPrimaryText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  modalSecondaryBtn: {
-    width: '100%', backgroundColor: '#F2F2F7', paddingVertical: 15,
-    borderRadius: 12, alignItems: 'center', marginBottom: 20,
+  enlargedAvatar: {
+    width: 240, height: 240,
+    borderRadius: 120,
+    borderWidth: 4, borderColor: '#4CAF50',
+    backgroundColor: '#333',
   },
-  modalSecondaryText: { color: '#333', fontWeight: '700', fontSize: 15 },
-  modalCancelText: { color: '#999', fontWeight: '600', fontSize: 15 },
+  avatarActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 40, // Space between the two items
+  },
+  avatarActionItem: {
+    alignItems: 'center',
+  },
+  avatarActionBtn: {
+    width: 56, height: 56,
+    borderRadius: 28,
+    backgroundColor: '#fff',
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 10,
+    borderWidth: 1, borderColor: '#e0e0e0',
+  },
+  avatarActionText: {
+    color: '#fff', fontSize: 13, fontWeight: '600',
+  },
 
   // Account Details
   detailSection: {
@@ -628,4 +862,39 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#ffdad6',
   },
   deleteAccountText: { color: '#D32F2F', fontSize: 15, fontWeight: '700', marginLeft: 8 },
+  editInput: {
+    borderBottomWidth: 1, borderBottomColor: '#4CAF50',
+    fontSize: 15, color: '#191c1d', fontWeight: '600',
+    minWidth: 120, paddingVertical: 0, textAlign: 'right',
+  },
+  memberSinceContainer: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    marginBottom: 8, marginTop: 12, gap: 6,
+  },
+  memberSinceText: {
+    fontSize: 14, color: '#666', fontWeight: '500',
+  },
+  passwordInputContainer: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#f5f5f5', borderRadius: 8,
+    marginBottom: 12, paddingRight: 16,
+  },
+  passwordInput: {
+    flex: 1, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15,
+  },
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center', paddingHorizontal: 20,
+  },
+  modalCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 24,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 5,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: '#191c1d', marginBottom: 8, textAlign: 'center' },
+  modalSubtext: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 20, lineHeight: 20 },
+  modalPrimaryBtn: {
+    backgroundColor: '#4CAF50', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 10,
+  },
+  modalPrimaryText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  modalCancelText: { color: '#888', fontSize: 15, textAlign: 'center', marginTop: 12, padding: 8 },
 });
