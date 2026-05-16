@@ -432,6 +432,15 @@ export default function HomeScreen() {
     }
   };
 
+  const handleOpenPasswordModal = () => {
+    setPasswordStep(1);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordOtp('');
+    setIsPasswordModalVisible(true);
+  };
+
   const renderAccountDetails = () => (
     <ScrollView style={styles.profileScroll} contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
       
@@ -482,7 +491,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Change Password */}
-        <TouchableOpacity style={styles.detailRow} onPress={() => setIsPasswordModalVisible(true)}>
+        <TouchableOpacity style={styles.detailRow} onPress={handleOpenPasswordModal}>
           <Text style={[styles.detailLabel, { color: '#191c1d' }]}>Change Password</Text>
           <Ionicons name="chevron-forward" size={18} color="#ccc" />
         </TouchableOpacity>
