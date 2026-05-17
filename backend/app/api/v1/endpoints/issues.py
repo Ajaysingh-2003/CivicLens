@@ -210,6 +210,7 @@ def get_comments(
             "issue_id": c.issue_id,
             "author_id": c.author_id,
             "author_name": c.author.username if c.author else "Deleted User",
+            "author_avatar_url": c.author.avatar_url if c.author else None,
             "content": c.content,
             "is_internal": c.is_internal,
             "created_at": c.created_at
@@ -247,7 +248,31 @@ def add_comment(
         "issue_id": db_obj.issue_id,
         "author_id": db_obj.author_id,
         "author_name": current_user.username,
+        "author_avatar_url": current_user.avatar_url,
         "content": db_obj.content,
         "is_internal": db_obj.is_internal,
         "created_at": db_obj.created_at
     }
+
+
+@router.delete("/{issue_id}/comments/{comment_id}")
+def delete_comment(
+    issue_id: int,
+    comment_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Delete a comment.
+    """
+    comment = db.query(Comment).filter(Comment.id == comment_id, Comment.issue_id == issue_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+        
+    if comment.author_id != current_user.id and current_user.role.name not in ["SUPER_ADMIN", "GOVT_OFFICIAL"]:
+        raise HTTPException(status_code=403, detail="Not enough permissions to delete this comment")
+        
+    db.delete(comment)
+    db.commit()
+    
+    return {"status": "success", "message": "Comment deleted"}

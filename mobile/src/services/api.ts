@@ -359,5 +359,17 @@ export const api = {
     });
     if (!res.ok) throw new Error("Failed to add comment");
     return res.json();
+  },
+
+  deleteComment: async (issueId: number, commentId: number) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/issues/${issueId}/comments/${commentId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    if (!res.ok) throw new Error("Failed to delete comment");
+    return res.json();
   }
 };

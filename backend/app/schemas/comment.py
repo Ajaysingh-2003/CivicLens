@@ -13,6 +13,7 @@ class CommentResponse(CommentBase):
     issue_id: int
     author_id: Optional[int]
     author_name: Optional[str]
+    author_avatar_url: Optional[str] = None
     created_at: datetime
     is_internal: bool
 

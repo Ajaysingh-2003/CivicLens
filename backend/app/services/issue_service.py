@@ -36,8 +36,10 @@ def format_issue(issue: Issue) -> Dict[str, Any]:
     # Add Actor Info
     if getattr(issue, 'reporter', None):
         issue_dict["reporter_name"] = issue.reporter.username
+        issue_dict["reporter_avatar_url"] = issue.reporter.avatar_url
     else:
         issue_dict["reporter_name"] = "Deleted User"
+        issue_dict["reporter_avatar_url"] = None
         
     # Image URL
     if getattr(issue, 'images', None) and len(issue.images) > 0:

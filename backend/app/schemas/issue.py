@@ -45,6 +45,7 @@ class IssueResponse(IssueBase):
     category_name: str
     category_color: str
     reporter_name: Optional[str] = None
+    reporter_avatar_url: Optional[str] = None
     image_url: Optional[str] = None
     comments_count: int = 0
 

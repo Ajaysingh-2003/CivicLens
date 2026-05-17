@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, Image,
   Dimensions, StatusBar, ActivityIndicator, Alert, Modal, RefreshControl,
-  TextInput, Switch, Animated
+  TextInput, Switch, Animated, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -73,6 +73,7 @@ export default function HomeScreen() {
   const [selectedIssue, setSelectedIssue] = useState<any>(null);
   const [comments, setComments] = useState<any[]>([]);
   const [commentInput, setCommentInput] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   const loadComments = async (issueId: number) => {
     try {
@@ -362,9 +363,13 @@ export default function HomeScreen() {
         {/* Header: Avatar, Name, Time, Category */}
         <View style={styles.cardMetaPremium}>
           <View style={styles.cardMetaLeft}>
-            <View style={styles.reporterAvatarSmall}>
-              <Ionicons name="person" size={12} color="#aaa" />
-            </View>
+            {issue.reporter_avatar_url ? (
+              <Image source={{ uri: issue.reporter_avatar_url }} style={styles.reporterAvatarSmall} />
+            ) : (
+              <View style={styles.reporterAvatarSmall}>
+                <Ionicons name="person" size={12} color="#aaa" />
+              </View>
+            )}
             <Text style={styles.cardMetaText}>{issue.reporter_name || 'Anonymous'}</Text>
             <Text style={styles.cardMetaDivider}>·</Text>
             <Text style={styles.cardMetaText}>{formatTime(issue.created_at)}</Text>
@@ -400,7 +405,11 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.commentPill}>
+          <TouchableOpacity style={styles.commentPill} onPress={() => {
+            setSelectedIssue(issue);
+            loadComments(issue.id);
+            setActiveView('IssueDetails');
+          }}>
             <Ionicons name="chatbubble-outline" size={18} color="#718096" />
             <Text style={styles.commentBtnText}>{issue.comments_count}</Text>
           </TouchableOpacity>
@@ -807,27 +816,62 @@ export default function HomeScreen() {
     const netVotes = (issue.upvotes || 0) - (issue.downvotes || 0);
 
     const handleCommentSubmit = async () => {
-      if (!commentInput.trim()) return;
+      if (!commentInput.trim() || submittingComment) return;
+      setSubmittingComment(true);
       try {
         await api.addComment(issue.id, commentInput.trim());
         setCommentInput('');
-        loadComments(issue.id);
+        await loadComments(issue.id);
         setSelectedIssue({ ...issue, comments_count: (issue.comments_count || 0) + 1 });
         setIssues(issues.map(i => i.id === issue.id ? { ...i, comments_count: (i.comments_count || 0) + 1 } : i));
       } catch (e) {
         Alert.alert("Error", "Could not post comment");
+      } finally {
+        setSubmittingComment(false);
       }
     };
 
+    const handleDeleteComment = (commentId: number) => {
+      Alert.alert(
+        "Delete Comment",
+        "Are you sure you want to delete this comment?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { 
+            text: "Delete", 
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await api.deleteComment(issue.id, commentId);
+                await loadComments(issue.id);
+                setSelectedIssue({ ...issue, comments_count: Math.max(0, (issue.comments_count || 0) - 1) });
+                setIssues(issues.map(i => i.id === issue.id ? { ...i, comments_count: Math.max(0, (i.comments_count || 0) - 1) } : i));
+              } catch (e) {
+                Alert.alert("Error", "Could not delete comment");
+              }
+            }
+          }
+        ]
+      );
+    };
+
     return (
-      <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1, backgroundColor: '#FFFFFF' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
+      >
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }}>
           <View style={[styles.card, { borderBottomWidth: 0, marginBottom: 0 }]}>
             <View style={styles.cardMetaPremium}>
               <View style={styles.cardMetaLeft}>
-                <View style={styles.reporterAvatarSmall}>
-                  <Ionicons name="person" size={12} color="#aaa" />
-                </View>
+                {issue.reporter_avatar_url ? (
+                  <Image source={{ uri: issue.reporter_avatar_url }} style={styles.reporterAvatarSmall} />
+                ) : (
+                  <View style={styles.reporterAvatarSmall}>
+                    <Ionicons name="person" size={12} color="#aaa" />
+                  </View>
+                )}
                 <Text style={styles.cardMetaText}>{issue.reporter_name || 'Anonymous'}</Text>
                 <Text style={styles.cardMetaDivider}>·</Text>
                 <Text style={styles.cardMetaText}>{formatTime(issue.created_at)}</Text>
@@ -879,13 +923,24 @@ export default function HomeScreen() {
             ) : (
               comments.map((c) => (
                 <View key={c.id} style={styles.commentItem}>
-                  <View style={styles.commentHeader}>
-                    <View style={styles.reporterAvatarSmall}>
-                      <Ionicons name="person" size={10} color="#aaa" />
+                  <View style={[styles.commentHeader, { justifyContent: 'space-between' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      {c.author_avatar_url ? (
+                        <Image source={{ uri: c.author_avatar_url }} style={styles.reporterAvatarSmall} />
+                      ) : (
+                        <View style={styles.reporterAvatarSmall}>
+                          <Ionicons name="person" size={10} color="#aaa" />
+                        </View>
+                      )}
+                      <Text style={styles.commentAuthor}>{c.author_name}</Text>
+                      <Text style={styles.cardMetaDivider}>·</Text>
+                      <Text style={styles.commentTime}>{formatTime(c.created_at)}</Text>
                     </View>
-                    <Text style={styles.commentAuthor}>{c.author_name}</Text>
-                    <Text style={styles.cardMetaDivider}>·</Text>
-                    <Text style={styles.commentTime}>{formatTime(c.created_at)}</Text>
+                    {user && c.author_id === user.id && (
+                      <TouchableOpacity onPress={() => handleDeleteComment(c.id)}>
+                        <Ionicons name="trash-outline" size={16} color="#E53E3E" />
+                      </TouchableOpacity>
+                    )}
                   </View>
                   <Text style={styles.commentContent}>{c.content}</Text>
                 </View>
@@ -902,11 +957,15 @@ export default function HomeScreen() {
             onChangeText={setCommentInput}
             multiline
           />
-          <TouchableOpacity style={styles.commentSubmitBtn} onPress={handleCommentSubmit} disabled={!commentInput.trim()}>
-            <Ionicons name="send" size={20} color={commentInput.trim() ? '#4CAF50' : '#ccc'} />
+          <TouchableOpacity style={styles.commentSubmitBtn} onPress={handleCommentSubmit} disabled={!commentInput.trim() || submittingComment}>
+            {submittingComment ? (
+              <ActivityIndicator size="small" color="#4CAF50" />
+            ) : (
+              <Ionicons name="send" size={20} color={commentInput.trim() ? '#4CAF50' : '#ccc'} />
+            )}
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     );
   };
 
