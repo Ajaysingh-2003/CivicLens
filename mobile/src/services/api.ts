@@ -233,51 +233,6 @@ export const api = {
     return res.json();
   },
 
-  uploadAvatar: async (imageUri: string) => {
-    const token = await AsyncStorage.getItem("access_token");
-    // Generate filename from URI
-    const filename = imageUri.split('/').pop() || 'avatar.jpg';
-    
-    // Infer type from extension
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : `image`;
-
-    const formData = new FormData();
-    // @ts-ignore - React Native FormData accepts an object with uri, name, type
-    formData.append('file', { uri: imageUri, name: filename, type });
-
-    const res = await fetch(`${API_URL}/users/me/avatar`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "multipart/form-data",
-      },
-      body: formData,
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.detail || "Failed to upload avatar");
-    }
-    return res.json();
-  },
-
-  removeAvatar: async () => {
-    const token = await AsyncStorage.getItem("access_token");
-    const res = await fetch(`${API_URL}/users/me/avatar`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.detail || "Failed to remove avatar");
-    }
-    return res.json();
-  },
-
   classifyIssueImage: async (imageUri: string) => {
     const token = await AsyncStorage.getItem("access_token");
     const filename = imageUri.split('/').pop() || 'issue.jpg';
@@ -362,6 +317,47 @@ export const api = {
       const errorData = await res.json().catch(() => null);
       throw new Error(errorData?.detail || "Failed to delete issue");
     }
+    return res.json();
+  },
+
+  // Levels config — cached in AsyncStorage, refreshed only if missing
+  getLevels: async (): Promise<Array<{ level: number; title: string; min_points: number; description?: string }>> => {
+    const CACHE_KEY = 'civiclens_levels_cache';
+    try {
+      const cached = await AsyncStorage.getItem(CACHE_KEY);
+      if (cached) return JSON.parse(cached);
+    } catch {}
+
+    const res = await fetch(`${API_URL}/levels`);
+    if (!res.ok) throw new Error("Failed to fetch levels");
+    const data = await res.json();
+    // Persist so subsequent app opens don't need to fetch again
+    await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(data)).catch(() => {});
+    return data;
+  },
+
+  getComments: async (issueId: number) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/issues/${issueId}/comments`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    if (!res.ok) throw new Error("Failed to fetch comments");
+    return res.json();
+  },
+
+  addComment: async (issueId: number, content: string) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/issues/${issueId}/comments`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ content })
+    });
+    if (!res.ok) throw new Error("Failed to add comment");
     return res.json();
   }
 };

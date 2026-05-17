@@ -1,4 +1,5 @@
 from app.models.user import User
+from app.models.level import Level
 from app.models.region import Region
 from app.models.department import Department
 from app.models.category import Category

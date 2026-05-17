@@ -4,11 +4,13 @@ from sqlalchemy import func
 from geoalchemy2.shape import to_shape
 from app.models.issue import Issue, IssueStatus, IssuePriority
 from app.models.issue_history import IssueHistory
+from app.models.issue_vote import IssueVote
 from app.models.category import Category
 from app.models.user import User
 from app.models.issue_image import IssueImage
 from app.models.city import City
 from app.schemas.issue import IssueCreate, IssueUpdateStatus
+from app.services.user_service import award_points
 
 def format_issue(issue: Issue) -> Dict[str, Any]:
     """Safely converts the WKBElement PostGIS geometry into React-friendly lat/lng floats and adds metadata."""
@@ -67,12 +69,21 @@ def create_issue(db: Session, issue_in: IssueCreate, reporter_id: int) -> dict:
         reporter_id=reporter_id,
         city_id=city_id,
         geom=wkt_geom,
-        upvotes=0,
+        upvotes=1,
         downvotes=0
     )
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
+
+    # Automatically add upvote from the reporter
+    new_vote = IssueVote(issue_id=db_obj.id, user_id=reporter_id, vote_type=1)
+    db.add(new_vote)
+
+    # Award 1 point for creating the issue
+    reporter = db.query(User).filter(User.id == reporter_id).first()
+    if reporter:
+        award_points(db, reporter, 1)
 
     # Automatically create the first audit log entry
     history_obj = IssueHistory(
@@ -187,14 +198,14 @@ def delete_issue(db: Session, issue_id: int) -> bool:
     db.commit()
     return True
 
-
-from app.models.issue_vote import IssueVote
-
 def vote_issue(db: Session, issue_id: int, user_id: int, vote_type: int) -> Optional[dict]:
     """Handles upvoting/downvoting and dynamic priority escalation."""
     issue = db.query(Issue).filter(Issue.id == issue_id).first()
     if not issue:
         return None
+
+    reporter = db.query(User).filter(User.id == issue.reporter_id).first()
+    point_change = 0
 
     # Check for existing vote
     existing_vote = db.query(IssueVote).filter(
@@ -211,22 +222,32 @@ def vote_issue(db: Session, issue_id: int, user_id: int, vote_type: int) -> Opti
         # Changing vote (e.g., from downvote to upvote)
         if existing_vote.vote_type == 1:
             issue.upvotes -= 1
+            point_change -= 1
         elif existing_vote.vote_type == -1:
             issue.downvotes -= 1
+            point_change += 1
 
         existing_vote.vote_type = vote_type
         if vote_type == 1:
             issue.upvotes += 1
+            point_change += 1
         elif vote_type == -1:
             issue.downvotes += 1
+            point_change -= 1
     else:
         # New vote
         new_vote = IssueVote(issue_id=issue_id, user_id=user_id, vote_type=vote_type)
         db.add(new_vote)
         if vote_type == 1:
             issue.upvotes += 1
+            point_change += 1
         elif vote_type == -1:
             issue.downvotes += 1
+            point_change -= 1
+
+    # Apply reputation changes to the reporter if someone else voted
+    if reporter and point_change != 0 and user_id != issue.reporter_id:
+        award_points(db, reporter, point_change)
 
     # Dynamic Priority Logic based on net votes
     net_votes = issue.upvotes - issue.downvotes

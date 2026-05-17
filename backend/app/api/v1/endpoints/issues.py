@@ -5,9 +5,11 @@ import uuid
 
 from app.api import deps
 from app.schemas.issue import IssueCreate, IssueResponse, IssueUpdateStatus, IssueMapResponse, IssueClassifyResponse
+from app.schemas.comment import CommentCreate, CommentResponse
 from app.services import issue_service, storage_service, ai_service
 from app.models.user import User
 from app.models.category import Category
+from app.models.comment import Comment
 
 router = APIRouter()
 
@@ -189,3 +191,63 @@ def delete_issue(
         
     return {"status": "success", "message": "Issue deleted"}
 
+
+@router.get("/{issue_id}/comments", response_model=List[CommentResponse])
+def get_comments(
+    issue_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Get all comments for a specific issue.
+    """
+    comments = db.query(Comment).filter(Comment.issue_id == issue_id).order_by(Comment.created_at.desc()).all()
+    
+    response = []
+    for c in comments:
+        response.append({
+            "id": c.id,
+            "issue_id": c.issue_id,
+            "author_id": c.author_id,
+            "author_name": c.author.username if c.author else "Deleted User",
+            "content": c.content,
+            "is_internal": c.is_internal,
+            "created_at": c.created_at
+        })
+    return response
+
+
+@router.post("/{issue_id}/comments", response_model=CommentResponse)
+def add_comment(
+    issue_id: int,
+    comment_in: CommentCreate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Add a comment to an issue.
+    """
+    # Verify issue exists
+    issue = issue_service.get_issue(db, issue_id=issue_id)
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+        
+    db_obj = Comment(
+        issue_id=issue_id,
+        author_id=current_user.id,
+        content=comment_in.content,
+        is_internal=False
+    )
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    
+    return {
+        "id": db_obj.id,
+        "issue_id": db_obj.issue_id,
+        "author_id": db_obj.author_id,
+        "author_name": current_user.username,
+        "content": db_obj.content,
+        "is_internal": db_obj.is_internal,
+        "created_at": db_obj.created_at
+    }

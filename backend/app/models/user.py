@@ -1,7 +1,9 @@
-from sqlalchemy import Column, Integer, String, Boolean, Enum as SAEnum, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, Enum as SAEnum, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 import enum
 from app.db.base import Base
+
 
 class UserRole(str, enum.Enum):
     CITIZEN = "CITIZEN"
@@ -20,15 +22,13 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_email_verified = Column(Boolean, default=False)
     notifications_enabled = Column(Boolean, default=True)
-    
-    from sqlalchemy import DateTime
-    from sqlalchemy.sql import func
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Gamification
     points = Column(Integer, default=0)
-    title = Column(String, default="Citizen")
-    
+    level_id = Column(Integer, ForeignKey("levels.id"), nullable=True)
+    level = relationship("Level", back_populates="users")
+
     avatar_url = Column(String, nullable=True)
 
     # Relations

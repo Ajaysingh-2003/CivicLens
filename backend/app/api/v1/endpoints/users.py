@@ -150,14 +150,25 @@ def delete_user_me(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user)
 ) -> Any:
-    """Deletes the currently authenticated user account."""
+    """Deletes the currently authenticated user account and all associated R2 assets."""
+    # 1. Delete avatar from R2
     if current_user.avatar_url:
         storage_service.delete_avatar(current_user.avatar_url)
-        
+
+    # 2. Delete all issue images from R2 that were uploaded by this user
+    from app.models.issue import Issue
+    from app.models.issue_image import IssueImage
+    user_issues = db.query(Issue).filter(Issue.reporter_id == current_user.id).all()
+    for issue in user_issues:
+        images = db.query(IssueImage).filter(IssueImage.issue_id == issue.id).all()
+        for img in images:
+            storage_service.delete_avatar(img.image_url)  # reuses the same R2 delete logic
+
+    # 3. Delete user (cascade handles related DB rows via FK constraints)
     success = user_service.delete_user(db, current_user.id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete user account")
-        
+
     return {"status": "success", "message": "User account deleted"}
 
 from app.schemas.user import UserUpdate, PasswordChange, PasswordChangeRequest
