@@ -23,6 +23,46 @@ export const api = {
     return res.json();
   },
 
+  // ─── Forgot Password ─────────────────────────────────────────────────────────
+  forgotPasswordSendOtp: async (email: string) => {
+    const res = await fetch(`${API_URL}/login/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Failed to send reset OTP");
+    }
+    return res.json();
+  },
+
+  forgotPasswordVerifyOtp: async (email: string, otpCode: string) => {
+    const res = await fetch(`${API_URL}/login/forgot-password/verify-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp_code: otpCode }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Invalid OTP");
+    }
+    return res.json();
+  },
+
+  forgotPasswordReset: async (email: string, resetToken: string, newPassword: string) => {
+    const res = await fetch(`${API_URL}/login/forgot-password/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, reset_token: resetToken, new_password: newPassword }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Failed to reset password");
+    }
+    return res.json();
+  },
+
   register: async (
     email: string,
     password: string,
@@ -190,8 +230,11 @@ export const api = {
     return res.json();
   },
 
-  resendOtp: async (email: string, purpose: 'register' | 'login') => {
-    const endpoint = purpose === 'register' ? '/users/register/resend-otp' : '/login/resend-login-otp';
+  resendOtp: async (email: string, purpose: 'register' | 'login' | 'forgot_password') => {
+    let endpoint;
+    if (purpose === 'register') endpoint = '/users/register/resend-otp';
+    else if (purpose === 'forgot_password') endpoint = '/login/forgot-password';
+    else endpoint = '/login/resend-login-otp';
     const res = await fetch(`${API_URL}${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
