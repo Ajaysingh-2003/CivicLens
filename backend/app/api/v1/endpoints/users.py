@@ -234,3 +234,45 @@ def change_password(
     db.commit()
     
     return {"status": "success", "message": "Password updated successfully"}
+
+
+@router.post("/me/recalculate-points")
+def recalculate_my_points(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Recalculates the current user's citizen points from their actual live activity.
+    Counts: +1 per existing post + +1 per upvote received from others.
+    Useful after any data inconsistency (e.g. test deletions).
+    """
+    new_points = user_service.recalculate_points(db, current_user)
+    return {
+        "status": "success",
+        "points": new_points,
+        "message": f"Points recalculated. New total: {new_points}"
+    }
+
+
+@router.post("/admin/recalculate-points/{user_id}")
+def admin_recalculate_user_points(
+    user_id: int,
+    db: Session = Depends(deps.get_db),
+    current_admin: User = Depends(deps.get_current_active_admin)
+) -> Any:
+    """
+    (Admin only) Recalculates points for any user by their ID.
+    Safe to run multiple times — always produces the correct derived value.
+    """
+    target_user = user_service.get_user(db, user_id=user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_points = user_service.recalculate_points(db, target_user)
+    return {
+        "status": "success",
+        "user_id": user_id,
+        "points": new_points,
+        "message": f"Points recalculated for user {user_id}. New total: {new_points}"
+    }
+

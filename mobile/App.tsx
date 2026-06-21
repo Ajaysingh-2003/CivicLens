@@ -6,8 +6,12 @@ import { AuthProvider, useAuth } from './src/services/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import OtpScreen from './src/screens/OtpScreen';
-import HomeScreen from './src/screens/HomeScreen';
 import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
+
+import MainTabNavigator from './src/navigation/MainTabNavigator';
+import IssueDetailsScreen from './src/screens/IssueDetailsScreen';
+import AccountDetailsScreen from './src/screens/AccountDetailsScreen';
+import MyReportsScreen from './src/screens/MyReportsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -24,7 +28,12 @@ function AppNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {user ? (
         // Authorized Views
-        <Stack.Screen name="Home" component={HomeScreen} />
+        <>
+          <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+          <Stack.Screen name="IssueDetails" component={IssueDetailsScreen} />
+          <Stack.Screen name="AccountDetails" component={AccountDetailsScreen} />
+          <Stack.Screen name="MyReports" component={MyReportsScreen} />
+        </>
       ) : (
         // Unauthorized Views
         <>

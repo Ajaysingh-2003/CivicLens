@@ -52,14 +52,88 @@ def create_user(db: Session, user_in: UserCreate) -> User:
 
 def award_points(db: Session, user: User, points: int) -> bool:
     """
-    Add points to a user and auto-update their level.
-    Returns True if the user levelled up.
+    DEPRECATED — legacy shim. Delegates to record_points with ADMIN_ADJUSTMENT.
+    Kept temporarily so any missed call sites don't break.
     """
-    user.points = (user.points or 0) + points
+    from app.models.point_transaction import PointReason
+    return record_points(db, user, points, PointReason.ADMIN_ADJUSTMENT)
+
+
+def record_points(
+    db: Session,
+    user: User,
+    delta: int,
+    reason,
+    reference_issue_id: int = None,
+    caused_by_user_id: int = None,
+) -> bool:
+    """
+    Single entry point for ALL point changes.
+    1. Inserts an immutable ledger row into point_transactions.
+    2. Updates the users.points cache atomically.
+    3. Re-derives the user's level.
+    Returns True if the user levelled up.
+    NOTE: Does NOT commit — the caller owns the transaction boundary.
+    """
+    from app.models.point_transaction import PointTransaction
+
+    txn = PointTransaction(
+        user_id=user.id,
+        delta=delta,
+        reason=reason,
+        reference_issue_id=reference_issue_id,
+        caused_by_user_id=caused_by_user_id,
+    )
+    db.add(txn)
+    user.points = max((user.points or 0) + delta, 0)  # Floor at 0
     levelled_up = assign_level(db, user)
+    return levelled_up
+
+
+def revoke_issue_points(db: Session, user: User, issue_id: int) -> None:
+    """
+    Reverses ALL points a user earned from a specific issue.
+    Queries the ledger for the net delta tied to this issue,
+    then inserts a single reversal row to zero it out.
+    """
+    from sqlalchemy import func as sqlfunc
+    from app.models.point_transaction import PointTransaction, PointReason
+
+    total = (
+        db.query(sqlfunc.coalesce(sqlfunc.sum(PointTransaction.delta), 0))
+        .filter(
+            PointTransaction.user_id == user.id,
+            PointTransaction.reference_issue_id == issue_id,
+        )
+        .scalar()
+    )
+
+    if total != 0:
+        record_points(
+            db, user, -total,
+            PointReason.VOTES_REVOKED_ON_DELETE,
+            reference_issue_id=issue_id,
+        )
+
+
+def recalculate_points(db: Session, user: User) -> int:
+    """
+    Rebuilds the users.points cache from the ledger (source of truth).
+    Safe to run any number of times — always produces the correct value.
+    """
+    from sqlalchemy import func as sqlfunc
+    from app.models.point_transaction import PointTransaction
+
+    computed = (
+        db.query(sqlfunc.coalesce(sqlfunc.sum(PointTransaction.delta), 0))
+        .filter(PointTransaction.user_id == user.id)
+        .scalar()
+    )
+    user.points = max(computed, 0)
+    assign_level(db, user)
     db.commit()
     db.refresh(user)
-    return levelled_up
+    return user.points
 
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:

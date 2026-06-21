@@ -10,7 +10,8 @@ from app.models.user import User
 from app.models.issue_image import IssueImage
 from app.models.city import City
 from app.schemas.issue import IssueCreate, IssueUpdateStatus
-from app.services.user_service import award_points
+from app.services.user_service import record_points, revoke_issue_points
+from app.models.point_transaction import PointReason
 
 def format_issue(issue: Issue) -> Dict[str, Any]:
     """Safely converts the WKBElement PostGIS geometry into React-friendly lat/lng floats and adds metadata."""
@@ -82,10 +83,11 @@ def create_issue(db: Session, issue_in: IssueCreate, reporter_id: int) -> dict:
     new_vote = IssueVote(issue_id=db_obj.id, user_id=reporter_id, vote_type=1)
     db.add(new_vote)
 
-    # Award 1 point for creating the issue
+    # Award 1 point for creating the issue (ledger + cache)
     reporter = db.query(User).filter(User.id == reporter_id).first()
     if reporter:
-        award_points(db, reporter, 1)
+        record_points(db, reporter, 1, PointReason.ISSUE_CREATED,
+                      reference_issue_id=db_obj.id)
 
     # Automatically create the first audit log entry
     history_obj = IssueHistory(
@@ -196,6 +198,12 @@ def delete_issue(db: Session, issue_id: int) -> bool:
     issue = db.query(Issue).filter(Issue.id == issue_id).first()
     if not issue:
         return False
+    # Reverse ALL points this user earned from this issue
+    # (creation point + any upvote points from others)
+    reporter = db.query(User).filter(User.id == issue.reporter_id).first()
+    if reporter:
+        revoke_issue_points(db, reporter, issue_id)
+        db.flush()  # Persist points change before delete cascade expires the user object
     db.delete(issue)
     db.commit()
     return True
@@ -249,7 +257,9 @@ def vote_issue(db: Session, issue_id: int, user_id: int, vote_type: int) -> Opti
 
     # Apply reputation changes to the reporter if someone else voted
     if reporter and point_change != 0 and user_id != issue.reporter_id:
-        award_points(db, reporter, point_change)
+        reason = PointReason.VOTE_CHANGED if existing_vote else PointReason.VOTE_RECEIVED
+        record_points(db, reporter, point_change, reason,
+                      reference_issue_id=issue_id, caused_by_user_id=user_id)
 
     # Dynamic Priority Logic based on net votes
     net_votes = issue.upvotes - issue.downvotes

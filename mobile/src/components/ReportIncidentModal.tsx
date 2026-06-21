@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Image, TextInput, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View, Text, StyleSheet, Modal, TouchableOpacity, Image, TextInput,
+  ActivityIndicator, Alert, ScrollView, Animated, Easing
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Circle } from 'react-native-svg';
 import { api } from '../services/api';
 import * as Location from 'expo-location';
+
 
 interface ReportIncidentModalProps {
   visible: boolean;
@@ -11,8 +16,101 @@ interface ReportIncidentModalProps {
   onSuccess: () => void;
 }
 
+// ─── Animated SVG Tick ───────────────────────────────────────────────────────
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+function SuccessAnimation() {
+  const strokeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.6)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pointsAnim = useRef(new Animated.Value(0)).current;
+  const pointsOpacity = useRef(new Animated.Value(0)).current;
+  const RADIUS = 48;
+  const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
+  useEffect(() => {
+    Animated.spring(scaleAnim, { toValue: 1, tension: 60, friction: 7, useNativeDriver: true }).start();
+    Animated.timing(strokeAnim, { toValue: 1, duration: 700, delay: 200, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.18, duration: 900, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+      ])
+    ).start();
+    Animated.sequence([
+      Animated.delay(800),
+      Animated.parallel([
+        Animated.spring(pointsAnim, { toValue: -18, tension: 80, friction: 6, useNativeDriver: true }),
+        Animated.timing(pointsOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
+      ]),
+    ]).start();
+  }, []);
+
+  const strokeDashoffset = strokeAnim.interpolate({ inputRange: [0, 1], outputRange: [CIRCUMFERENCE, 0] });
+
+  return (
+    <View style={ss.animWrapper}>
+      <Animated.View style={[ss.svgWrap, { transform: [{ scale: scaleAnim }] }]}>
+        <Svg width={120} height={120} viewBox="0 0 120 120">
+          <Circle cx="60" cy="60" r={RADIUS} fill="#1A2B1A" />
+          <AnimatedCircle
+            cx="60" cy="60" r={RADIUS} fill="none"
+            stroke="#4CAF50" strokeWidth={5}
+            strokeDasharray={CIRCUMFERENCE}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            rotation="-90" origin="60, 60"
+          />
+        </Svg>
+        <View style={ss.tickOverlay}>
+          <Ionicons name="checkmark" size={44} color="#4CAF50" />
+        </View>
+      </Animated.View>
+      <Animated.View style={[ss.pointsChip, { opacity: pointsOpacity, transform: [{ translateY: pointsAnim }] }]}>
+        <Ionicons name="star" size={12} color="#FFD700" />
+        <Text style={ss.pointsChipText}>+1 Citizen Point</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
+// ─── Success Card ─────────────────────────────────────────────────────────────
+function SuccessStep({ imageUri, categoryName, onDismiss }: { imageUri: string | null; categoryName: string; onDismiss: () => void }) {
+  const cardAnim = useRef(new Animated.Value(50)).current;
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(cardAnim, { toValue: 0, tension: 60, friction: 9, useNativeDriver: true }),
+      Animated.timing(cardOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  return (
+    <View style={ss.root}>
+      {imageUri && <Image source={{ uri: imageUri }} style={ss.bg} blurRadius={8} />}
+      <View style={ss.overlay} />
+      <Animated.View style={[ss.card, { opacity: cardOpacity, transform: [{ translateY: cardAnim }] }]}>
+        <SuccessAnimation />
+        <Text style={ss.title}>Report Filed!</Text>
+        <Text style={ss.subtitle}>Your report is live. Citizens within 5 km have been notified.</Text>
+        {!!categoryName && (
+          <View style={ss.catRow}>
+            <Ionicons name="pricetag" size={13} color="#4CAF50" />
+            <Text style={ss.catText}>{categoryName}</Text>
+          </View>
+        )}
+        <TouchableOpacity style={ss.doneBtn} onPress={onDismiss} activeOpacity={0.85}>
+          <Text style={ss.doneBtnText}>Done</Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+}
+
+// ─── Main Modal ───────────────────────────────────────────────────────────────
 export default function ReportIncidentModal({ visible, imageUri, onClose, onSuccess }: ReportIncidentModalProps) {
-  const [step, setStep] = useState<'ANALYZING' | 'CONFIRM' | 'DETAILS'>('ANALYZING');
+  const [step, setStep] = useState<'ANALYZING' | 'CONFIRM' | 'DETAILS' | 'SUCCESS'>('ANALYZING');
   
   // AI Results
   const [suggestedCategoryId, setSuggestedCategoryId] = useState<number | null>(null);
@@ -29,7 +127,15 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
 
   useEffect(() => {
     if (visible && imageUri) {
+      // Reset all form state so a new report starts fresh every time
       setStep('ANALYZING');
+      setTitle('');
+      setDescription('');
+      setSelectedCategoryId(null);
+      setSuggestedCategoryId(null);
+      setSuggestedCategoryName('');
+      setUploadedImageUrl('');
+      setShowDropdown(false);
       analyzeImage(imageUri);
       fetchCategories();
     }
@@ -103,8 +209,7 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
         uploadedImageUrl
       );
       
-      Alert.alert('Success', 'Your report has been submitted to the city!');
-      onSuccess();
+      setStep('SUCCESS');
     } catch (e: any) {
       Alert.alert('Submission Failed', e.message);
     } finally {
@@ -113,6 +218,18 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
   };
 
   if (!visible) return null;
+
+  if (step === 'SUCCESS') {
+    return (
+      <Modal visible={visible} animationType="fade" presentationStyle="fullScreen">
+        <SuccessStep
+          imageUri={imageUri}
+          categoryName={suggestedCategoryName}
+          onDismiss={() => { setStep('ANALYZING'); onSuccess(); }}
+        />
+      </Modal>
+    );
+  }
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
@@ -442,4 +559,62 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   }
+});
+
+// ─── Success Screen Styles ────────────────────────────────────────────────────
+const ss = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#0d0d0d', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 40 },
+  bg: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.78)' },
+  card: {
+    width: '90%', backgroundColor: '#1A1A1A', borderRadius: 28,
+    paddingHorizontal: 28, paddingTop: 36, paddingBottom: 28,
+    alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(76,175,80,0.2)',
+    shadowColor: '#4CAF50', shadowOpacity: 0.15, shadowRadius: 24, shadowOffset: { width: 0, height: 0 },
+    elevation: 12,
+  },
+  animWrapper: { alignItems: 'center', marginBottom: 8, height: 160 },
+  glowRing: {
+    position: 'absolute', top: -10, left: -10,
+    width: 140, height: 140, borderRadius: 70,
+    backgroundColor: 'rgba(76,175,80,0.12)',
+    borderWidth: 2, borderColor: 'rgba(76,175,80,0.25)',
+  },
+  svgWrap: { position: 'absolute', top: 0 },
+  tickOverlay: {
+    position: 'absolute', width: 120, height: 120,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pointsChip: {
+    position: 'absolute', bottom: 0,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#2A2A2A', borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderWidth: 1, borderColor: 'rgba(255,215,0,0.4)',
+  },
+  pointsChipText: { color: '#FFD700', fontSize: 13, fontWeight: '700' },
+  title: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: -0.5, marginBottom: 10, textAlign: 'center' },
+  subtitle: { fontSize: 14, color: '#aaa', textAlign: 'center', lineHeight: 22, marginBottom: 16 },
+  catRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(76,175,80,0.12)', borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderWidth: 1, borderColor: 'rgba(76,175,80,0.3)',
+    marginBottom: 20,
+  },
+  catText: { color: '#4CAF50', fontSize: 13, fontWeight: '700' },
+  divider: { width: '100%', height: 1, backgroundColor: 'rgba(255,255,255,0.07)', marginBottom: 20 },
+  rewardRow: { flexDirection: 'row', width: '100%', marginBottom: 24, justifyContent: 'center' },
+  rewardItem: { flex: 1, alignItems: 'center', gap: 6 },
+  rewardLabel: { fontSize: 11, color: '#666', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  rewardValue: { fontSize: 20, fontWeight: '800', color: '#fff' },
+  rewardSep: { width: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginHorizontal: 8 },
+  doneBtn: {
+    width: '100%', backgroundColor: '#4CAF50', borderRadius: 16,
+    paddingVertical: 16, alignItems: 'center',
+    shadowColor: '#4CAF50', shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  doneBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
 });

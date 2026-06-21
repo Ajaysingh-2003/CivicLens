@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 // In physical device development, this must be the actual LAN IP of your computer running the FastAPI backend.
-// We observed 192.168.1.7 in your Metro logs, so we'll default to that!
-const API_URL = "http://192.168.1.7:8000/api/v1";
+// We observed 192.168.1.8 in your Metro logs, so we'll default to that!
+const API_URL = "http://192.168.1.8:8000/api/v1";
 
 export const api = {
   login: async (email: string, password: string) => {
@@ -414,5 +414,20 @@ export const api = {
     });
     if (!res.ok) throw new Error("Failed to delete comment");
     return res.json();
-  }
+  },
+
+  /**
+   * Recalculates the current user's points from their actual live data.
+   * Call this to fix any inconsistency caused by test deletions.
+   * Formula: +1 per existing post + +1 per upvote received from others.
+   */
+  recalculatePoints: async (): Promise<{ status: string; points: number; message: string }> => {
+    const token = await AsyncStorage.getItem('access_token');
+    const res = await fetch(`${API_URL}/users/me/recalculate-points`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Failed to recalculate points");
+    return res.json();
+  },
 };
