@@ -10,6 +10,7 @@ from app.services import issue_service, storage_service, ai_service
 from app.models.user import User
 from app.models.category import Category
 from app.models.comment import Comment
+from app.utils.profanity import validate_clean_text
 
 router = APIRouter()
 
@@ -89,6 +90,12 @@ def create_issue(
     """
     (Mobile App) Report a new civil issue with strict GPS coordinates.
     """
+    try:
+        validate_clean_text(issue_in.title, "Title")
+        validate_clean_text(issue_in.description, "Description")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     return issue_service.create_issue(db, issue_in=issue_in, reporter_id=current_user.id)
 
 @router.get("/", response_model=List[IssueResponse])
@@ -228,6 +235,11 @@ def add_comment(
     """
     Add a comment to an issue.
     """
+    try:
+        validate_clean_text(comment_in.content, "Comment")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     # Verify issue exists
     issue = issue_service.get_issue(db, issue_id=issue_id)
     if not issue:

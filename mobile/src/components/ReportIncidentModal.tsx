@@ -124,6 +124,7 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible && imageUri) {
@@ -136,6 +137,7 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
       setSuggestedCategoryName('');
       setUploadedImageUrl('');
       setShowDropdown(false);
+      setError(null);
       analyzeImage(imageUri);
       fetchCategories();
     }
@@ -211,7 +213,11 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
       
       setStep('SUCCESS');
     } catch (e: any) {
-      Alert.alert('Submission Failed', e.message);
+      if (e.message && (e.message.toLowerCase().includes('explicit') || e.message.toLowerCase().includes('inappropriate'))) {
+        setError(e.message);
+      } else {
+        Alert.alert('Submission Failed', e.message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -323,8 +329,9 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
               <TextInput 
                 style={styles.input} 
                 value={title} 
-                onChangeText={setTitle} 
+                onChangeText={(text) => { setTitle(text); setError(null); }}
                 placeholder="Brief description of the issue"
+                placeholderTextColor="#999"
                 maxLength={50}
               />
 
@@ -332,12 +339,20 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
               <TextInput 
                 style={[styles.input, styles.textArea]} 
                 value={description} 
-                onChangeText={setDescription} 
+                onChangeText={(text) => { setDescription(text); setError(null); }}
                 placeholder="Provide any helpful details for the city..."
+                placeholderTextColor="#999"
                 multiline
                 numberOfLines={4}
                 maxLength={300}
               />
+
+              {error && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffebee', padding: 12, borderRadius: 8, marginBottom: 20 }}>
+                  <Ionicons name="warning" size={20} color="#d32f2f" style={{ marginRight: 8 }} />
+                  <Text style={{ color: '#d32f2f', fontSize: 14, flex: 1, fontWeight: '500' }}>{error}</Text>
+                </View>
+              )}
 
               <TouchableOpacity 
                 style={[styles.btnPrimary, { marginTop: 24 }]} 

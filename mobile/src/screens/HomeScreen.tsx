@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Animated, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Animated, DeviceEventEmitter, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { useAuth } from '../services/AuthContext';
 import { api } from '../services/api';
 import { useLevels } from '../hooks/useLevels';
@@ -46,7 +47,7 @@ const SkeletonFeed = () => {
   );
 };
 
-export default function HomeScreen({ navigation }: any) {
+export default function HomeScreen({ navigation, onReportPress }: any) {
   const { user } = useAuth();
   const levelsConfig = useLevels();
 
@@ -57,7 +58,15 @@ export default function HomeScreen({ navigation }: any) {
   const loadIssues = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.getIssues();
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        // Fallback to no location if denied (backend will return generic newest)
+        const data = await api.getIssues();
+        setIssues(data);
+        return;
+      }
+      const location = await Location.getCurrentPositionAsync({});
+      const data = await api.getIssues(location.coords.latitude, location.coords.longitude, 5.0);
       setIssues(data);
     } catch (err: any) {
       console.log('Error loading issues:', err);
@@ -75,7 +84,14 @@ export default function HomeScreen({ navigation }: any) {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const data = await api.getIssues();
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        const data = await api.getIssues();
+        setIssues(data);
+        return;
+      }
+      const location = await Location.getCurrentPositionAsync({});
+      const data = await api.getIssues(location.coords.latitude, location.coords.longitude, 5.0);
       setIssues(data);
     } catch (err) {
       console.log('Refresh error:', err);
@@ -125,9 +141,20 @@ export default function HomeScreen({ navigation }: any) {
           >
             {issues.length === 0 ? (
               <View style={styles.emptyState}>
-                <Ionicons name="leaf-outline" size={48} color="#ccc" />
-                <Text style={styles.emptyStateText}>No issues reported yet.</Text>
-                <Text style={styles.emptyStateSubText}>Be the first to report one!</Text>
+                <View style={styles.emptyIconCircle}>
+                  <Ionicons name="location-outline" size={40} color="#4CAF50" />
+                </View>
+                <Text style={styles.emptyTitle}>All clear nearby!</Text>
+                <Text style={styles.emptySubtitle}>
+                  There are no issues reported within 5km of your location. 
+                  Spot something? Be the first to report it and earn a point!
+                </Text>
+                {onReportPress && (
+                  <TouchableOpacity style={styles.emptyBtn} onPress={onReportPress} activeOpacity={0.85}>
+                    <Ionicons name="camera-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.emptyBtnText}>Report an issue</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               issues.map(issue => (
@@ -169,9 +196,35 @@ const styles = StyleSheet.create({
   feed: { flex: 1 },
 
   // Empty State
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-  emptyStateText: { fontSize: 18, fontWeight: '700', color: '#bbb', marginTop: 16 },
-  emptyStateSubText: { fontSize: 14, color: '#ccc', marginTop: 6 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, paddingTop: 100 },
+  emptyIconCircle: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 20, fontWeight: '700', color: '#333',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14, color: '#999', textAlign: 'center',
+    lineHeight: 21, marginBottom: 28,
+  },
+  emptyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 14,
+    shadowColor: '#4CAF50', shadowOpacity: 0.3, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  emptyBtnText: {
+    color: '#fff', fontSize: 16, fontWeight: '700',
+  },
 
   // Skeleton Styles
   card: { backgroundColor: '#FFFFFF', marginBottom: 8, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },

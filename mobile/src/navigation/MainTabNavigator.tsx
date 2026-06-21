@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../services/AuthContext';
 import { api } from '../services/api';
@@ -33,11 +34,20 @@ export default function MainTabNavigator() {
 
   const handleReportPress = async () => {
     try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
+      // 1. Request Camera Permissions
+      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+      if (cameraStatus !== 'granted') {
         Alert.alert('Permission needed', 'Camera permission is required to report an issue.');
         return;
       }
+      
+      // 2. Request Location Permissions
+      const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
+      if (locationStatus !== 'granted') {
+        Alert.alert('Permission needed', 'Location permission is required to accurately map your report.');
+        return;
+      }
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -89,7 +99,9 @@ export default function MainTabNavigator() {
           },
         })}
       >
-        <Tab.Screen name="Feed" component={HomeScreen} options={{ title: 'Home' }} />
+        <Tab.Screen name="Feed" options={{ title: 'Home' }}>
+          {(props: any) => <HomeScreen {...props} onReportPress={handleReportPress} />}
+        </Tab.Screen>
         <Tab.Screen
           name="Camera"
           component={HomeScreen} // placeholder, never rendered

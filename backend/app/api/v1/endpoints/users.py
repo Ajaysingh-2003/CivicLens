@@ -8,6 +8,7 @@ from app.api import deps
 from app.schemas.user import UserCreate, UserResponse
 from app.services import user_service
 from app.models.user import User
+from app.utils.profanity import validate_clean_text
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -15,6 +16,7 @@ limiter = Limiter(key_func=get_remote_address)
 from pydantic import BaseModel
 from app.services import otp_service, email_service
 from app.core.security import create_access_token
+import re
 from app.schemas.token import Token
 from datetime import timedelta
 from app.core.config import settings
@@ -29,6 +31,17 @@ def register_user(request: Request, *, db: Session = Depends(deps.get_db), user_
     """
     Register a new user and send an OTP. Rate limited.
     """
+    if not re.match(r'^[a-zA-Z0-9_.]{3,30}$', user_in.username):
+        raise HTTPException(
+            status_code=400, 
+            detail="Username must be 3-30 characters long and can only contain letters, numbers, underscores, and periods."
+        )
+
+    try:
+        validate_clean_text(user_in.username, "Username", is_username=True)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     user = user_service.get_user_by_email(db, email=user_in.email)
     if user:
         if user.is_email_verified:

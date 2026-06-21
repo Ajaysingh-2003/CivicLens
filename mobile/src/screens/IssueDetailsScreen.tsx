@@ -28,6 +28,7 @@ export default function IssueDetailsScreen({ route, navigation }: any) {
   const [commentInput, setCommentInput] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const [loadingComments, setLoadingComments] = useState(true);
+  const [commentError, setCommentError] = useState<string | null>(null);
 
   const loadComments = async () => {
     try {
@@ -47,13 +48,18 @@ export default function IssueDetailsScreen({ route, navigation }: any) {
   const handleCommentSubmit = async () => {
     if (!commentInput.trim() || submittingComment) return;
     setSubmittingComment(true);
+    setCommentError(null);
     try {
       await api.addComment(issue.id, commentInput.trim());
       setCommentInput('');
       await loadComments();
       setIssue({ ...issue, comments_count: (issue.comments_count || 0) + 1 });
-    } catch (e) {
-      Alert.alert("Error", "Could not post comment");
+    } catch (e: any) {
+      if (e.message && (e.message.toLowerCase().includes('explicit') || e.message.toLowerCase().includes('inappropriate'))) {
+        setCommentError(e.message);
+      } else {
+        Alert.alert("Error", "Could not post comment");
+      }
     } finally {
       setSubmittingComment(false);
     }
@@ -98,7 +104,7 @@ export default function IssueDetailsScreen({ route, navigation }: any) {
 
       <KeyboardAvoidingView 
         style={{ flex: 1, backgroundColor: '#FFFFFF' }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
           <View style={[styles.card, { borderBottomWidth: 0, marginBottom: 0 }]}>
@@ -190,12 +196,18 @@ export default function IssueDetailsScreen({ route, navigation }: any) {
           </View>
         </ScrollView>
 
+        {commentError && (
+          <View style={{ backgroundColor: '#ffebee', paddingVertical: 8, paddingHorizontal: 16, borderTopWidth: 1, borderTopColor: '#f5c6cb' }}>
+            <Text style={{ color: '#d32f2f', fontSize: 13, fontWeight: '500' }}>{commentError}</Text>
+          </View>
+        )}
+
         <View style={styles.commentInputContainer}>
           <TextInput 
             style={styles.commentInputBox}
             placeholder="Add a comment..."
             value={commentInput}
-            onChangeText={setCommentInput}
+            onChangeText={(text) => { setCommentInput(text); setCommentError(null); }}
             multiline
           />
           <TouchableOpacity style={styles.commentSubmitBtn} onPress={handleCommentSubmit} disabled={!commentInput.trim() || submittingComment}>
@@ -255,7 +267,6 @@ const styles = StyleSheet.create({
   commentInputContainer: { 
     flexDirection: 'row', padding: 12, borderTopWidth: 1, borderTopColor: '#E2E8F0', 
     backgroundColor: '#FFFFFF', alignItems: 'flex-end',
-    position: 'absolute', bottom: 0, left: 0, right: 0
   },
   commentInputBox: {
     flex: 1, backgroundColor: '#F1F5F9', borderRadius: 20, paddingHorizontal: 16, 
