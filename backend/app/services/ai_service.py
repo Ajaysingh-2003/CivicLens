@@ -16,21 +16,31 @@ clip_classifier = pipeline(
 )
 print("CLIP Model Loaded successfully!")
 
-def classify_image(image_bytes: bytes, categories: List[str]) -> str:
+def classify_image(image_bytes: bytes, categories: List[str], moderation_labels: List[str] = None) -> str:
     """
     Given raw image bytes and a list of category names (e.g. ['Pothole', 'Graffiti']),
     it will format the candidate labels and return the single highest matching category name.
+    If moderation_labels are provided, they are evaluated simultaneously. If a moderation
+    label scores highest, a ValueError is raised.
     """
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     
     # We prefix the categories with a contextual prompt for better accuracy
-    candidate_labels = [f"A photo of a {cat}" for cat in categories]
+    civic_labels = [f"A photo of a {cat}" for cat in categories]
     
-    results = clip_classifier(image, candidate_labels=candidate_labels)
+    # Combine with moderation labels if provided
+    mod_labels = moderation_labels or []
+    all_labels = civic_labels + mod_labels
+    
+    results = clip_classifier(image, candidate_labels=all_labels)
     
     # results is a list of dicts sorted by score descending:
     # [{'score': 0.99, 'label': 'A photo of a Pothole'}, ...]
     top_result = results[0]['label']
+    
+    # Check if the top result is a moderation label
+    if top_result in mod_labels:
+        raise ValueError(f"Image rejected. Identified as: {top_result}")
     
     # Extract the original category name from the prefixed string
     for cat in categories:

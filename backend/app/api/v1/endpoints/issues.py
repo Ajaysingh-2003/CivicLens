@@ -44,11 +44,23 @@ async def classify_issue_image(
         
     category_names = [c.name for c in categories]
     
-    # 3. Classify the image
+    # 3. Classify the image with moderation
+    moderation_labels = [
+        "A photo of a person's face or selfie",
+        "A photo of a pet or animal",
+        "A photo of food or a meal",
+        "A screenshot, meme, or text document",
+        "Explicit, sexual, or nude content",
+        "Violent or hateful imagery"
+    ]
+    
     try:
-        suggested_name = ai_service.classify_image(file_bytes, category_names)
+        suggested_name = ai_service.classify_image(file_bytes, category_names, moderation_labels)
+    except ValueError as e:
+        # Caught a moderation rejection
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        # Fallback gracefully if AI fails, default to first category (e.g. Other)
+        # Fallback gracefully if AI fails for other reasons, default to first category (e.g. Other)
         print(f"AI Classification Failed: {e}")
         suggested_name = category_names[-1] # Usually "Other" is at the end
         

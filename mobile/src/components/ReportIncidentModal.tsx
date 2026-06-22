@@ -110,9 +110,11 @@ function SuccessStep({ imageUri, categoryName, onDismiss }: { imageUri: string |
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 export default function ReportIncidentModal({ visible, imageUri, onClose, onSuccess }: ReportIncidentModalProps) {
-  const [step, setStep] = useState<'ANALYZING' | 'CONFIRM' | 'DETAILS' | 'SUCCESS'>('ANALYZING');
+  type Step = 'ANALYZING' | 'CONFIRM' | 'DETAILS' | 'SUCCESS' | 'REJECTED';
+  const [step, setStep] = useState<Step>('ANALYZING');
   
   // AI Results
+  const [rejectedReason, setRejectedReason] = useState<string>('');
   const [suggestedCategoryId, setSuggestedCategoryId] = useState<number | null>(null);
   const [suggestedCategoryName, setSuggestedCategoryName] = useState<string>('');
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string>('');
@@ -167,9 +169,14 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
       
       setStep('CONFIRM');
     } catch (e: any) {
-      console.error(e);
-      Alert.alert('Analysis Failed', e.message || 'Could not analyze image.');
-      onClose();
+      console.log('Analysis Error:', e?.message || e);
+      if (e.message && e.message.includes('Image rejected')) {
+        setRejectedReason(e.message.replace('Image rejected. Identified as: ', ''));
+        setStep('REJECTED');
+      } else {
+        Alert.alert('Analysis Failed', e.message || 'Could not analyze image.');
+        onClose();
+      }
     }
   };
 
@@ -233,6 +240,34 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
           categoryName={suggestedCategoryName}
           onDismiss={() => { setStep('ANALYZING'); onSuccess(); }}
         />
+      </Modal>
+    );
+  }
+
+  if (step === 'REJECTED') {
+    return (
+      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+        <View style={{ flex: 1, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: '#ffebee', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+            <Ionicons name="shield-outline" size={50} color="#d32f2f" />
+          </View>
+          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#1A202C', marginBottom: 12, textAlign: 'center' }}>
+            Upload Rejected
+          </Text>
+          <Text style={{ fontSize: 16, color: '#4A5568', textAlign: 'center', lineHeight: 24, marginBottom: 8 }}>
+            CivicLens is specifically for reporting civic infrastructure issues.
+          </Text>
+          <Text style={{ fontSize: 16, color: '#4A5568', textAlign: 'center', lineHeight: 24, marginBottom: 32 }}>
+            Your image was flagged as: <Text style={{ fontWeight: 'bold', color: '#d32f2f' }}>{rejectedReason}</Text>.
+          </Text>
+          
+          <TouchableOpacity 
+            style={[styles.btnPrimary, { width: '100%', marginBottom: 16 }]} 
+            onPress={() => { setStep('ANALYZING'); onClose(); }}
+          >
+            <Text style={styles.btnPrimaryText}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
       </Modal>
     );
   }
