@@ -277,3 +277,57 @@ def vote_issue(db: Session, issue_id: int, user_id: int, vote_type: int) -> Opti
     # Reload with relations for proper formatting
     return get_issue(db, issue_id)
 
+
+def find_nearby_duplicates(
+    db: Session, lat: float, lng: float, category_id: int, radius_m: int = 50
+) -> List[dict]:
+    """
+    Finds potential duplicate issues using a PostGIS spatial query.
+    Searches within `radius_m` meters for issues with the same category
+    that are still active (not resolved/rejected) and created within the last 6 months.
+    Uses the GIST index on geom for O(log n) performance.
+    """
+    from datetime import datetime, timedelta
+
+    user_point = f"SRID=4326;POINT({lng} {lat})"
+    six_months_ago = datetime.utcnow() - timedelta(days=180)
+
+    query = db.query(Issue).options(
+        joinedload(Issue.category),
+        joinedload(Issue.reporter),
+        selectinload(Issue.images),
+    ).filter(
+        # Same category
+        Issue.category_id == category_id,
+        # Within radius (ST_DistanceSphere returns meters)
+        func.ST_DistanceSphere(
+            Issue.geom, func.ST_GeomFromText(user_point, 4326)
+        ) <= radius_m,
+        # Only active issues
+        Issue.status.notin_([IssueStatus.RESOLVED, IssueStatus.REJECTED]),
+        # Created within last 6 months
+        Issue.created_at >= six_months_ago,
+    ).order_by(
+        # Closest first
+        func.ST_DistanceSphere(Issue.geom, func.ST_GeomFromText(user_point, 4326))
+    ).limit(5)
+
+    issues = query.all()
+    
+    results = []
+    for issue in issues:
+        item = {
+            "id": issue.id,
+            "title": issue.title,
+            "status": issue.status,
+            "upvotes": issue.upvotes,
+            "image_url": issue.images[0].image_url if issue.images else None,
+            "created_at": issue.created_at,
+            "reporter_name": issue.reporter.username if issue.reporter else "Unknown",
+            "category_name": issue.category.name if issue.category else "Uncategorized",
+        }
+        results.append(item)
+    
+    return results
+
+

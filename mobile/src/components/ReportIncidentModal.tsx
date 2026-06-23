@@ -14,6 +14,7 @@ interface ReportIncidentModalProps {
   imageUri: string | null;
   onClose: () => void;
   onSuccess: () => void;
+  onViewIssue?: (issue: any) => void;
 }
 
 // ─── Animated SVG Tick ───────────────────────────────────────────────────────
@@ -109,8 +110,8 @@ function SuccessStep({ imageUri, categoryName, onDismiss }: { imageUri: string |
 }
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
-export default function ReportIncidentModal({ visible, imageUri, onClose, onSuccess }: ReportIncidentModalProps) {
-  type Step = 'ANALYZING' | 'CONFIRM' | 'DETAILS' | 'SUCCESS' | 'REJECTED';
+export default function ReportIncidentModal({ visible, imageUri, onClose, onSuccess, onViewIssue }: ReportIncidentModalProps) {
+  type Step = 'ANALYZING' | 'CONFIRM' | 'DETAILS' | 'SUCCESS' | 'REJECTED' | 'DUPLICATE_FOUND';
   const [step, setStep] = useState<Step>('ANALYZING');
   
   // AI Results
@@ -127,6 +128,10 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Duplicate Detection
+  const [duplicates, setDuplicates] = useState<any[]>([]);
+  const [userLocation, setUserLocation] = useState<{lat: number; lng: number} | null>(null);
 
   useEffect(() => {
     if (visible && imageUri) {
@@ -180,16 +185,38 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
     }
   };
 
-  const handleConfirmAI = (isCorrect: boolean) => {
+  const handleConfirmAI = async (isCorrect: boolean) => {
+    let categoryId: number | null = null;
     if (isCorrect) {
       setShowDropdown(false);
-      setStep('DETAILS');
+      categoryId = suggestedCategoryId;
     } else {
       setShowDropdown(true);
       setSelectedCategoryId(null);
       setTitle('');
       setStep('DETAILS');
+      return;
     }
+
+    // Run duplicate check before proceeding
+    if (categoryId) {
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          let loc = await Location.getCurrentPositionAsync({});
+          setUserLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+          const result = await api.checkDuplicates(loc.coords.latitude, loc.coords.longitude, categoryId);
+          if (result.duplicates_found && result.potential_duplicates.length > 0) {
+            setDuplicates(result.potential_duplicates);
+            setStep('DUPLICATE_FOUND');
+            return;
+          }
+        }
+      } catch (e) {
+        console.log('Duplicate check failed, proceeding:', e);
+      }
+    }
+    setStep('DETAILS');
   };
 
   const handleSubmit = async () => {
@@ -321,6 +348,76 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
               
               <TouchableOpacity style={styles.btnSecondaryGreen} onPress={() => handleConfirmAI(false)}>
                 <Text style={styles.btnSecondaryGreenText}>No, let me choose</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {step === 'DUPLICATE_FOUND' && (
+            <View style={styles.confirmContainer}>
+              <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                {imageUri && (
+                  <Image source={{ uri: imageUri }} style={{ width: 120, height: 120, borderRadius: 12, marginBottom: 16 }} />
+                )}
+                <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFF3E0', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                  <Ionicons name="alert-circle-outline" size={32} color="#EF6C00" />
+                </View>
+                <Text style={{ fontSize: 20, fontWeight: '700', color: '#1A202C', textAlign: 'center', marginBottom: 6 }}>
+                  Similar Report Found
+                </Text>
+                <Text style={{ fontSize: 14, color: '#4A5568', textAlign: 'center', lineHeight: 20 }}>
+                  We found a matching issue that was already reported near your location. Is this the same problem?
+                </Text>
+              </View>
+
+              {duplicates.map((dup: any) => (
+                <View key={dup.id} style={{ backgroundColor: '#F7FAFC', borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0' }}>
+                  {dup.image_url && (
+                    <Image source={{ uri: dup.image_url }} style={{ width: '100%', height: 160, borderRadius: 12, marginBottom: 12 }} resizeMode="cover" />
+                  )}
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#1A202C', marginBottom: 6 }}>{dup.title}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8F5E9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                      <Ionicons name="pricetag" size={12} color="#4CAF50" />
+                      <Text style={{ fontSize: 12, color: '#4CAF50', marginLeft: 4, fontWeight: '500' }}>{dup.category_name}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF3E0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                      <Ionicons name="time-outline" size={12} color="#EF6C00" />
+                      <Text style={{ fontSize: 12, color: '#EF6C00', marginLeft: 4, fontWeight: '500' }}>{dup.status}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Ionicons name="arrow-up" size={14} color="#4CAF50" />
+                      <Text style={{ fontSize: 13, color: '#4A5568', marginLeft: 2, fontWeight: '500' }}>{dup.upvotes}</Text>
+                    </View>
+                  </View>
+                  <Text style={{ fontSize: 12, color: '#718096', marginTop: 8 }}>Reported by {dup.reporter_name}</Text>
+                </View>
+              ))}
+
+              <TouchableOpacity
+                style={styles.btnPrimary}
+                onPress={async () => {
+                  if (duplicates.length > 0 && onViewIssue) {
+                    try {
+                      const fullIssue = await api.getIssueById(duplicates[0].id);
+                      onClose();
+                      onViewIssue(fullIssue);
+                    } catch (e) {
+                      console.log('Failed to load issue:', e);
+                      onClose();
+                    }
+                  } else {
+                    onClose();
+                  }
+                }}
+              >
+                <Text style={styles.btnPrimaryText}>Yes, it's the same issue</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.btnSecondaryGreen}
+                onPress={() => setStep('DETAILS')}
+              >
+                <Text style={styles.btnSecondaryGreenText}>No, this is different</Text>
               </TouchableOpacity>
             </View>
           )}

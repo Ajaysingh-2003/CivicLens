@@ -2,19 +2,35 @@ import io
 from PIL import Image
 import torch
 import requests
-from transformers import pipeline
+from transformers import CLIPProcessor, CLIPModel
 from typing import List
 
-# We initialize this globally so the model is only loaded into memory ONCE
-# when the application starts up, preventing huge latency on each request.
 print("Loading CLIP Model into memory... This might take a few seconds.")
-# Using clip-vit-base-patch32, which is a good balance of speed and accuracy
-clip_classifier = pipeline(
-    task="zero-shot-image-classification", 
-    model="openai/clip-vit-base-patch32",
-    device=0 if torch.cuda.is_available() else -1
-)
+model_id = "openai/clip-vit-base-patch32"
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+model = CLIPModel.from_pretrained(model_id).to(device)
+processor = CLIPProcessor.from_pretrained(model_id)
 print("CLIP Model Loaded successfully!")
+
+# Cache for text features to avoid re-encoding on every request
+_cached_labels = None
+_cached_text_features = None
+
+def get_text_features(labels: List[str]):
+    global _cached_labels, _cached_text_features
+    if _cached_labels == labels and _cached_text_features is not None:
+        return _cached_text_features
+    
+    inputs = processor(text=labels, return_tensors="pt", padding=True).to(device)
+    with torch.no_grad():
+        text_features = model.get_text_features(**inputs)
+        # Normalize
+        text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
+    
+    _cached_labels = labels
+    _cached_text_features = text_features
+    return text_features
 
 def classify_image(image_bytes: bytes, categories: List[str], moderation_labels: List[str] = None) -> str:
     """
@@ -25,6 +41,9 @@ def classify_image(image_bytes: bytes, categories: List[str], moderation_labels:
     """
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     
+    # Resize image to speed up processor handling
+    image.thumbnail((500, 500))
+    
     # We prefix the categories with a contextual prompt for better accuracy
     civic_labels = [f"A photo of a {cat}" for cat in categories]
     
@@ -32,11 +51,21 @@ def classify_image(image_bytes: bytes, categories: List[str], moderation_labels:
     mod_labels = moderation_labels or []
     all_labels = civic_labels + mod_labels
     
-    results = clip_classifier(image, candidate_labels=all_labels)
+    # Get cached text features (super fast after first run)
+    text_features = get_text_features(all_labels)
     
-    # results is a list of dicts sorted by score descending:
-    # [{'score': 0.99, 'label': 'A photo of a Pothole'}, ...]
-    top_result = results[0]['label']
+    # Process image
+    inputs = processor(images=image, return_tensors="pt").to(device)
+    with torch.no_grad():
+        image_features = model.get_image_features(**inputs)
+        image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)
+        
+    # Calculate cosine similarity
+    similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
+    
+    # Get top result
+    best_idx = similarity[0].argmax().item()
+    top_result = all_labels[best_idx]
     
     # Check if the top result is a moderation label
     if top_result in mod_labels:
@@ -47,5 +76,5 @@ def classify_image(image_bytes: bytes, categories: List[str], moderation_labels:
         if top_result == f"A photo of a {cat}":
             return cat
             
-    # Fallback (should theoretically never hit due to softmax)
+    # Fallback (should theoretically never hit)
     return categories[0]

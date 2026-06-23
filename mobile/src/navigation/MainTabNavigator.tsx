@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, Alert, Platform, DeviceEventEmitter } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -28,6 +29,7 @@ function CameraTabButton({ onPress }: { onPress: () => void }) {
 export default function MainTabNavigator() {
   const insets = useSafeAreaInsets();
   const { user, login } = useAuth();
+  const navigation = useNavigation<any>();
 
   const [isReportModalVisible, setReportModalVisible] = useState(false);
   const [reportImageUri, setReportImageUri] = useState<string | null>(null);
@@ -133,6 +135,11 @@ export default function MainTabNavigator() {
           } catch (e) {
             console.log("Failed to refresh user points", e);
           }
+        }}
+        onViewIssue={(issue: any) => {
+          setReportModalVisible(false);
+          setReportImageUri(null);
+          navigation.navigate('IssueDetails', { issue });
         }}
       />
     </>

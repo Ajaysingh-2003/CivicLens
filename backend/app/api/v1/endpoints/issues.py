@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import uuid
 
 from app.api import deps
-from app.schemas.issue import IssueCreate, IssueResponse, IssueUpdateStatus, IssueMapResponse, IssueClassifyResponse
+from app.schemas.issue import IssueCreate, IssueResponse, IssueUpdateStatus, IssueMapResponse, IssueClassifyResponse, DuplicateCheckRequest, DuplicateCheckResponse
 from app.schemas.comment import CommentCreate, CommentResponse
 from app.services import issue_service, storage_service, ai_service
 from app.models.user import User
@@ -70,6 +70,26 @@ async def classify_issue_image(
         image_url=image_url,
         suggested_category_id=suggested_category.id,
         suggested_category_name=suggested_category.name
+    )
+
+@router.post("/check-duplicates", response_model=DuplicateCheckResponse)
+def check_duplicates(
+    *,
+    db: Session = Depends(deps.get_db),
+    request: DuplicateCheckRequest,
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Check for existing issues near the given coordinates with the same category.
+    Used by the mobile app to warn users about potential duplicate reports.
+    """
+    duplicates = issue_service.find_nearby_duplicates(
+        db, lat=request.lat, lng=request.lng,
+        category_id=request.category_id, radius_m=request.radius_m
+    )
+    return DuplicateCheckResponse(
+        duplicates_found=len(duplicates) > 0,
+        potential_duplicates=duplicates
     )
 
 @router.get("/categories")

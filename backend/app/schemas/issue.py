@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from app.models.issue import IssuePriority, IssueStatus
 
@@ -56,3 +56,27 @@ class IssueClassifyResponse(BaseModel):
     image_url: str
     suggested_category_id: int
     suggested_category_name: str
+
+class DuplicateCheckRequest(BaseModel):
+    lat: float
+    lng: float
+    category_id: int
+    radius_m: int = Field(default=50, description="Search radius in meters")
+
+class DuplicateMatchItem(BaseModel):
+    id: int
+    title: str
+    status: IssueStatus
+    upvotes: int
+    image_url: Optional[str] = None
+    created_at: datetime
+    reporter_name: Optional[str] = None
+    category_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class DuplicateCheckResponse(BaseModel):
+    duplicates_found: bool
+    potential_duplicates: List[DuplicateMatchItem] = []
+

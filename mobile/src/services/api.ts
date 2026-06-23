@@ -302,6 +302,24 @@ export const api = {
     return res.json();
   },
 
+  checkDuplicates: async (lat: number, lng: number, category_id: number) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/issues/check-duplicates`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ lat, lng, category_id, radius_m: 50 }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Failed to check duplicates");
+    }
+    return res.json();
+  },
+
   createIssue: async (title: string, description: string, category_id: number, lat: number, lng: number, image_url: string) => {
     const token = await AsyncStorage.getItem("access_token");
     const res = await fetch(`${API_URL}/issues/`, {
@@ -330,6 +348,15 @@ export const api = {
   getCategories: async () => {
     const res = await fetch(`${API_URL}/issues/categories`);
     if (!res.ok) throw new Error("Failed to fetch categories");
+    return res.json();
+  },
+
+  getIssueById: async (issueId: number) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/issues/${issueId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Failed to fetch issue");
     return res.json();
   },
   

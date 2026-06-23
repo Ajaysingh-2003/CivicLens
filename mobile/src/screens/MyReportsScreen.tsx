@@ -173,6 +173,11 @@ export default function MyReportsScreen({ navigation }: any) {
             console.log("Failed to refresh user points", e);
           }
         }}
+        onViewIssue={(issue: any) => {
+          setReportModalVisible(false);
+          setReportImageUri(null);
+          navigation.navigate('IssueDetails', { issue });
+        }}
       />
     </SafeAreaView>
   );
