@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import uuid
 
 from app.api import deps
-from app.schemas.issue import IssueCreate, IssueResponse, IssueUpdateStatus, IssueMapResponse, IssueClassifyResponse, DuplicateCheckRequest, DuplicateCheckResponse
+from app.schemas.issue import IssueCreate, IssueResponse, IssueUpdateStatus, IssueMapResponse, IssueClassifyResponse, DuplicateCheckRequest, DuplicateCheckResponse, ReportCreate
 from app.schemas.comment import CommentCreate, CommentResponse
 from app.services import issue_service, storage_service, ai_service
 from app.models.user import User
@@ -320,3 +320,22 @@ def delete_comment(
     db.commit()
     
     return {"status": "success", "message": "Comment deleted"}
+
+@router.post("/{issue_id}/report")
+def report_issue(
+    issue_id: int,
+    report_data: ReportCreate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Report an issue for community moderation.
+    """
+    issue_service.report_issue(
+        db=db,
+        issue_id=issue_id,
+        reporter_id=current_user.id,
+        reason=report_data.reason,
+        description=report_data.description
+    )
+    return {"status": "success", "message": "Report submitted successfully"}

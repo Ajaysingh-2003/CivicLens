@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
 import { useAuth } from '../services/AuthContext';
+import ReportPostModal from '../components/ReportPostModal';
 
 const formatTime = (dateString: string) => {
   const date = new Date(dateString);
@@ -29,6 +30,7 @@ export default function IssueDetailsScreen({ route, navigation }: any) {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [loadingComments, setLoadingComments] = useState(true);
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [isReportModalVisible, setReportModalVisible] = useState(false);
 
   const loadComments = async () => {
     try {
@@ -58,11 +60,22 @@ export default function IssueDetailsScreen({ route, navigation }: any) {
       if (e.message && (e.message.toLowerCase().includes('explicit') || e.message.toLowerCase().includes('inappropriate'))) {
         setCommentError(e.message);
       } else {
-        Alert.alert("Error", "Could not post comment");
+        setCommentError("Failed to add comment");
       }
     } finally {
       setSubmittingComment(false);
     }
+  };
+
+  const handleReportMenu = () => {
+    Alert.alert(
+      "Post Options",
+      "What would you like to do?",
+      [
+        { text: "Report", style: "destructive", onPress: () => setReportModalVisible(true) },
+        { text: "Cancel", style: "cancel" }
+      ]
+    );
   };
 
   const handleDeleteComment = (commentId: number) => {
@@ -157,6 +170,12 @@ export default function IssueDetailsScreen({ route, navigation }: any) {
                 <Ionicons name="chatbubble-outline" size={18} color="#718096" />
                 <Text style={styles.commentBtnText}>{issue.comments_count}</Text>
               </View>
+
+              <View style={{ flex: 1 }} />
+              
+              <TouchableOpacity style={styles.moreAction} onPress={handleReportMenu}>
+                <Ionicons name="ellipsis-vertical" size={20} color="#718096" />
+              </TouchableOpacity>
             </View>
           </View>
           
@@ -219,6 +238,15 @@ export default function IssueDetailsScreen({ route, navigation }: any) {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+      <ReportPostModal
+        visible={isReportModalVisible}
+        issueId={issue.id}
+        onClose={() => setReportModalVisible(false)}
+        onSuccess={() => {
+          setReportModalVisible(false);
+          Alert.alert("Report Submitted", "Thank you for keeping our community safe.");
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -255,6 +283,7 @@ const styles = StyleSheet.create({
   commentBtnText: { fontSize: 14, color: '#4A5568', fontWeight: '600' },
   categoryChip: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
   categoryChipText: { fontSize: 11, fontWeight: '700' },
+  moreAction: { padding: 6, borderRadius: 16 },
 
   commentsDivider: { height: 8, backgroundColor: '#F0F2F5', width: '100%' },
   commentsSection: { padding: 16, backgroundColor: '#FFFFFF' },

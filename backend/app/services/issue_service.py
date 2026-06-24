@@ -330,4 +330,67 @@ def find_nearby_duplicates(
     
     return results
 
+from app.models.issue_report import IssueReport, ReportReason
+from fastapi import HTTPException
 
+def get_report_weight(level: int) -> int:
+    if level == 1: return 1
+    if level == 2: return 2
+    if level == 3: return 4
+    if level == 4: return 7
+    if level >= 5: return 10
+    return 1
+
+def report_issue(db: Session, issue_id: int, reporter_id: int, reason: str, description: Optional[str] = None) -> None:
+    issue = db.query(Issue).filter(Issue.id == issue_id).first()
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+        
+    if issue.reporter_id == reporter_id:
+        raise HTTPException(status_code=400, detail="You cannot report your own issue")
+        
+    # Check if already reported
+    existing_report = db.query(IssueReport).filter(
+        IssueReport.issue_id == issue_id,
+        IssueReport.reporter_id == reporter_id
+    ).first()
+    if existing_report:
+        raise HTTPException(status_code=400, detail="You have already reported this issue")
+
+    # Calculate weight
+    user = db.query(User).filter(User.id == reporter_id).first()
+    weight = get_report_weight(user.level.level_number if user and user.level else 1)
+
+    # Create report
+    new_report = IssueReport(
+        issue_id=issue_id,
+        reporter_id=reporter_id,
+        reason=ReportReason(reason),
+        description=description,
+        weight_applied=weight
+    )
+    db.add(new_report)
+    
+    # Calculate total weight (flush first so the new report gets an ID but without committing)
+    db.flush()
+    
+    total_weight = db.query(func.sum(IssueReport.weight_applied)).filter(
+        IssueReport.issue_id == issue_id
+    ).scalar() or 0
+    
+    # Auto-reject threshold = 15
+    if total_weight >= 15 and issue.status != IssueStatus.REJECTED:
+        old_status = issue.status
+        issue.status = IssueStatus.REJECTED
+        
+        # Log history
+        history = IssueHistory(
+            issue_id=issue.id,
+            changed_by_id=reporter_id,  # The straw that broke the camel's back
+            old_status=old_status,
+            new_status=IssueStatus.REJECTED,
+            notes=f"Auto-rejected due to community reports (Total Weight: {total_weight})"
+        )
+        db.add(history)
+        
+    db.commit()

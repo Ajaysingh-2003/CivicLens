@@ -80,3 +80,6 @@ class DuplicateCheckResponse(BaseModel):
     duplicates_found: bool
     potential_duplicates: List[DuplicateMatchItem] = []
 
+class ReportCreate(BaseModel):
+    reason: str
+    description: Optional[str] = None

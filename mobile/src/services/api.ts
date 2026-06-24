@@ -359,6 +359,24 @@ export const api = {
     if (!res.ok) throw new Error("Failed to fetch issue");
     return res.json();
   },
+
+  reportIssue: async (issueId: number, reason: string, description?: string) => {
+    const token = await AsyncStorage.getItem("access_token");
+    const res = await fetch(`${API_URL}/issues/${issueId}/report`, {
+      method: "POST",
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ reason, description })
+    });
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.detail || "Failed to submit report");
+    }
+    return res.json();
+  },
   
   deleteAccount: async () => {
     const token = await AsyncStorage.getItem("access_token");
