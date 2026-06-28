@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingVi
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
 import { useAuth } from '../services/AuthContext';
+import { supabase } from '../services/supabase';
 
 export default function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
@@ -23,16 +24,12 @@ export default function LoginScreen({ navigation }: any) {
     setError('');
 
     try {
-      const data = await api.login(email, password);
-      
-      if (data.status === 'mfa_required') {
-        navigation.navigate('OtpScreen', { email, purpose: 'login' });
-      } else {
-        // Fallback for non-MFA login (if any)
-        await login(data.access_token, null); 
-        const user = await api.getMe();
-        await login(data.access_token, user);
-      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+      // The AuthContext onAuthStateChange will automatically detect this and redirect
     } catch (err: any) {
       setError(err.message);
     } finally {

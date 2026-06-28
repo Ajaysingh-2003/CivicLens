@@ -173,9 +173,11 @@ export default function IssueDetailsScreen({ route, navigation }: any) {
 
               <View style={{ flex: 1 }} />
               
-              <TouchableOpacity style={styles.moreAction} onPress={handleReportMenu}>
-                <Ionicons name="ellipsis-vertical" size={20} color="#718096" />
-              </TouchableOpacity>
+              {issue.reporter_id !== user?.id && (
+                <TouchableOpacity style={styles.moreAction} onPress={handleReportMenu}>
+                  <Ionicons name="ellipsis-vertical" size={20} color="#718096" />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
           

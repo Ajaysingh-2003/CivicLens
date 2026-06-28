@@ -7,10 +7,8 @@ from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.core.config import settings
 from app.models.user import User, UserRole
-from app.schemas.token import TokenPayload
-from app.services import user_service
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/login/access-token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/users/sync")
 
 def get_db() -> Generator:
     try:
@@ -19,21 +17,52 @@ def get_db() -> Generator:
     finally:
         db.close()
 
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
+import urllib.request
+import json
+
+jwks_cache = None
+
+def get_jwks():
+    global jwks_cache
+    if not jwks_cache:
+        url = f"{settings.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+        with urllib.request.urlopen(url) as response:
+            jwks_cache = json.loads(response.read())
+    return jwks_cache
+
+def get_supabase_sub(token: str = Depends(oauth2_scheme)) -> str:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        token_data = TokenPayload(**payload)
-        if token_data.sub is None:
+        # Get public keys (JWKS) to verify ES256/RS256 asymmetric signatures
+        jwks = get_jwks()
+        payload = jwt.decode(
+            token, 
+            jwks, 
+            algorithms=["HS256", "ES256", "RS256"],
+            options={"verify_aud": False} # Supabase uses 'authenticated' audience
+        )
+        sub: str = payload.get("sub")
+        if sub is None:
             raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-        
-    user = user_service.get_user(db, user_id=int(token_data.sub))
+        return sub
+    except JWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Could not validate credentials: {e}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+def get_current_user(db: Session = Depends(get_db), sub: str = Depends(get_supabase_sub)) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="User not found or credentials invalid",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    user = db.query(User).filter(User.supabase_uid == sub).first()
     if user is None:
         raise credentials_exception
     return user

@@ -7,6 +7,7 @@ import { useAuth } from '../services/AuthContext';
 import { api } from '../services/api';
 import { useLevels } from '../hooks/useLevels';
 import IssueCard from '../components/IssueCard';
+import ReportPostModal from '../components/ReportPostModal';
 
 const SkeletonFeed = () => {
   const [pulse] = useState(new Animated.Value(0.3));
@@ -54,6 +55,7 @@ export default function HomeScreen({ navigation, onReportPress }: any) {
   const [issues, setIssues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [reportIssueId, setReportIssueId] = useState<number | null>(null);
 
   const loadIssues = useCallback(async () => {
     setLoading(true);
@@ -161,13 +163,31 @@ export default function HomeScreen({ navigation, onReportPress }: any) {
                 <IssueCard
                   key={issue.id}
                   issue={issue}
+                  currentUserId={user?.id}
+                  onReport={(id) => setReportIssueId(id)}
                   onPress={() => navigation.navigate('IssueDetails', { issue })}
                 />
               ))
             )}
           </ScrollView>
         )}
-
+        
+        {reportIssueId && (
+          <ReportPostModal
+            visible={!!reportIssueId}
+            issueId={reportIssueId}
+            onClose={() => setReportIssueId(null)}
+            onSuccess={() => {
+              setReportIssueId(null);
+              // Small delay to allow modal to close smoothly before alert
+              setTimeout(() => {
+                import('react-native').then(({ Alert }) => {
+                  Alert.alert("Report Submitted", "Thank you for keeping our community safe.");
+                });
+              }, 300);
+            }}
+          />
+        )}
       </View>
     </SafeAreaView>
   );

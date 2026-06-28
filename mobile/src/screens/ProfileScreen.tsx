@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../services/AuthContext';
 import { api } from '../services/api';
 import { useLevels } from '../hooks/useLevels';
+import ModerationRejectionModal from '../components/ModerationRejectionModal';
 
 export default function ProfileScreen({ navigation }: any) {
   const { user, login, logout } = useAuth();
@@ -14,6 +15,7 @@ export default function ProfileScreen({ navigation }: any) {
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [isAvatarModalVisible, setAvatarModalVisible] = useState(false);
+  const [rejectionMessage, setRejectionMessage] = useState('');
 
   const handlePickImage = async (useCamera: boolean) => {
     try {
@@ -36,7 +38,12 @@ export default function ProfileScreen({ navigation }: any) {
           if (token) await login(token, updatedUser);
           Alert.alert('Success', 'Avatar updated!');
         } catch (err: any) {
-          Alert.alert('Error', err.message || 'Failed to upload avatar');
+          const msg = err.message || 'Failed to upload avatar';
+          if (msg.includes('rejected') || msg.includes('inappropriate')) {
+            setRejectionMessage(msg);
+          } else {
+            Alert.alert('Error', msg);
+          }
         } finally {
           setUploadingAvatar(false);
         }
@@ -178,6 +185,12 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <ModerationRejectionModal
+        visible={!!rejectionMessage}
+        onClose={() => setRejectionMessage('')}
+        message={rejectionMessage}
+      />
     </SafeAreaView>
   );
 }

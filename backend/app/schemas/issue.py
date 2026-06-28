@@ -1,17 +1,17 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional, List
 from datetime import datetime
 from app.models.issue import IssuePriority, IssueStatus
 
 class IssueBase(BaseModel):
     title: str = Field(..., max_length=150)
-    description: str
+    description: str = Field(..., max_length=2000)
     category_id: int
 
 class IssueCreate(IssueBase):
-    lat: float = Field(..., description="Latitude from mobile phone GPS (-90 to 90)")
-    lng: float = Field(..., description="Longitude from mobile phone GPS (-180 to 180)")
-    image_url: Optional[str] = None
+    lat: float = Field(..., ge=-90, le=90, description="Latitude from mobile phone GPS (-90 to 90)")
+    lng: float = Field(..., ge=-180, le=180, description="Longitude from mobile phone GPS (-180 to 180)")
+    image_url: Optional[HttpUrl] = None
 
 class IssueUpdateStatus(BaseModel):
     status: IssueStatus

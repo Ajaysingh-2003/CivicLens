@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -6,7 +7,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str # No defaults! Pydantic will pull strictly from .env
     
     # Auth configuration
-    SECRET_KEY: str # No defaults! Pydantic will pull strictly from .env
+    SECRET_KEY: str # Legacy or generic
+    SUPABASE_URL: str
+    SUPABASE_JWT_SECRET: Optional[str] = None # Optional fallback
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8 # 8 days
 

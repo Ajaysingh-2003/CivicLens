@@ -3,6 +3,8 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingVi
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { api } from '../services/api';
+import { supabase } from '../services/supabase';
+import ModerationRejectionModal from '../components/ModerationRejectionModal';
 
 export default function RegisterScreen({ navigation }: any) {
   const today = new Date();
@@ -26,6 +28,7 @@ export default function RegisterScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [rejectionMessage, setRejectionMessage] = useState('');
 
   useEffect(() => {
     api.getStates().then(setStates).catch(console.error);
@@ -66,21 +69,24 @@ export default function RegisterScreen({ navigation }: any) {
     setError('');
 
     try {
-      await api.register(
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        username,
-        role,
-        Number(selectedState),
-        Number(selectedCity),
-        role === 'NGO_ADMIN' && selectedDepartment ? Number(selectedDepartment) : undefined
-      );
+      });
+      if (error) throw error;
+
+      // Sync the user to our Postgres DB
+      await api.syncUser(email, username, role);
+
       setSuccess(true);
-      setTimeout(() => {
-        navigation.navigate('OtpScreen', { email, purpose: 'register' });
-      }, 1000);
+      // The AuthContext onAuthStateChange will automatically detect this and redirect to HomeScreen
     } catch (err: any) {
-      setError(err.message);
+      const msg = err.message || "Registration failed";
+      if (msg.includes('inappropriate') || msg.includes('taken')) {
+        setRejectionMessage(msg);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -212,8 +218,13 @@ export default function RegisterScreen({ navigation }: any) {
             <Text style={styles.linkText}>Back to Login</Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
+
+      <ModerationRejectionModal
+        visible={!!rejectionMessage}
+        onClose={() => setRejectionMessage('')}
+        message={rejectionMessage}
+      />
     </KeyboardAvoidingView>
   );
 }

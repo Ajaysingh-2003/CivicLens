@@ -1,96 +1,28 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-// In physical device development, this must be the actual LAN IP of your computer running the FastAPI backend.
-// We observed 192.168.1.8 in your Metro logs, so we'll default to that!
+import { supabase } from './supabase';
+
 const API_URL = "http://192.168.1.8:8000/api/v1";
 
+const getToken = async () => {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token;
+};
+
 export const api = {
-  login: async (email: string, password: string) => {
-    const formData = new URLSearchParams();
-    formData.append("username", email);
-    formData.append("password", password);
-
-    const res = await fetch(`${API_URL}/login/access-token`, {
+  syncUser: async (email: string, username: string, role: string) => {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/users/sync`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: formData.toString(),
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.detail || "Incorrect email or password");
-    }
-    return res.json();
-  },
-
-  // ─── Forgot Password ─────────────────────────────────────────────────────────
-  forgotPasswordSendOtp: async (email: string) => {
-    const res = await fetch(`${API_URL}/login/forgot-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ email, username, role }),
     });
     if (!res.ok) {
       const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.detail || "Failed to send reset OTP");
-    }
-    return res.json();
-  },
-
-  forgotPasswordVerifyOtp: async (email: string, otpCode: string) => {
-    const res = await fetch(`${API_URL}/login/forgot-password/verify-otp`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, otp_code: otpCode }),
-    });
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.detail || "Invalid OTP");
-    }
-    return res.json();
-  },
-
-  forgotPasswordReset: async (email: string, resetToken: string, newPassword: string) => {
-    const res = await fetch(`${API_URL}/login/forgot-password/reset`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, reset_token: resetToken, new_password: newPassword }),
-    });
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.detail || "Failed to reset password");
-    }
-    return res.json();
-  },
-
-  register: async (
-    email: string,
-    password: string,
-    username: string,
-    role: string,
-    stateId?: number,
-    cityId?: number,
-    departmentId?: number
-  ) => {
-    const res = await fetch(`${API_URL}/users/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        password,
-        username: username,
-        role,
-        state_id: stateId || null,
-        city_id: cityId || null,
-        department_id: departmentId || null
-      }),
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(
-        errorData?.detail || "Registration failed. Email might be taken."
-      );
+      throw new Error(errorData?.detail || "Sync failed.");
     }
     return res.json();
   },
@@ -114,7 +46,7 @@ export const api = {
   },
 
   getMe: async () => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/users/me`, {
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -123,7 +55,7 @@ export const api = {
   },
 
   getIssues: async (lat?: number, lng?: number, radiusKm: number = 5.0) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     let url = `${API_URL}/issues/?`;
     if (lat !== undefined && lng !== undefined) {
       url += `lat=${lat}&lng=${lng}&radius_km=${radiusKm}`;
@@ -136,7 +68,7 @@ export const api = {
   },
 
   getMyIssues: async () => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/issues/me`, {
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -145,7 +77,7 @@ export const api = {
   },
 
   uploadAvatar: async (uri: string) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const formData = new FormData();
     const filename = uri.split('/').pop() || 'avatar.jpg';
     const match = /\.(\w+)$/.exec(filename);
@@ -170,7 +102,7 @@ export const api = {
   },
 
   removeAvatar: async () => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/users/me/avatar`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` }
@@ -180,7 +112,7 @@ export const api = {
   },
 
   updateUserMe: async (data: { username?: string; notifications_enabled?: boolean }) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/users/me`, {
       method: "PUT",
       headers: {
@@ -196,88 +128,8 @@ export const api = {
     return res.json();
   },
 
-  requestPasswordChangeOtp: async (data: { current_password: string }) => {
-    const token = await AsyncStorage.getItem("access_token");
-    const res = await fetch(`${API_URL}/users/me/password/request-otp`, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}` 
-      },
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      throw new Error(err?.detail || "Failed to request OTP");
-    }
-    return res.json();
-  },
-
-  changePassword: async (data: any) => {
-    const token = await AsyncStorage.getItem("access_token");
-    const res = await fetch(`${API_URL}/users/me/password`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(data)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      throw new Error(err?.detail || "Failed to change password");
-    }
-    return res.json();
-  },
-
-  resendOtp: async (email: string, purpose: 'register' | 'login' | 'forgot_password') => {
-    let endpoint;
-    if (purpose === 'register') endpoint = '/users/register/resend-otp';
-    else if (purpose === 'forgot_password') endpoint = '/login/forgot-password';
-    else endpoint = '/login/resend-login-otp';
-    const res = await fetch(`${API_URL}${endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.detail || "Failed to resend OTP");
-    }
-    return res.json();
-  },
-
-  verifyRegisterOtp: async (email: string, otpCode: string) => {
-    const res = await fetch(`${API_URL}/users/register/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, otp_code: otpCode }),
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.detail || "Invalid OTP");
-    }
-    return res.json();
-  },
-
-  verifyLoginOtp: async (email: string, otpCode: string) => {
-    const res = await fetch(`${API_URL}/login/verify-login-otp`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, otp_code: otpCode }),
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.detail || "Invalid OTP");
-    }
-    return res.json();
-  },
-
   classifyIssueImage: async (imageUri: string) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const filename = imageUri.split('/').pop() || 'issue.jpg';
     const match = /\.(\w+)$/.exec(filename);
     const type = match ? `image/${match[1]}` : `image`;
@@ -303,7 +155,7 @@ export const api = {
   },
 
   checkDuplicates: async (lat: number, lng: number, category_id: number) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/issues/check-duplicates`, {
       method: "POST",
       headers: {
@@ -321,7 +173,7 @@ export const api = {
   },
 
   createIssue: async (title: string, description: string, category_id: number, lat: number, lng: number, image_url: string) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/issues/`, {
       method: "POST",
       headers: { 
@@ -352,7 +204,7 @@ export const api = {
   },
 
   getIssueById: async (issueId: number) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/issues/${issueId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -361,7 +213,7 @@ export const api = {
   },
 
   reportIssue: async (issueId: number, reason: string, description?: string) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/issues/${issueId}/report`, {
       method: "POST",
       headers: { 
@@ -379,7 +231,7 @@ export const api = {
   },
   
   deleteAccount: async () => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/users/me`, {
       method: "DELETE",
       headers: {
@@ -394,7 +246,7 @@ export const api = {
   },
   
   deleteIssue: async (issueId: number) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/issues/${issueId}`, {
       method: "DELETE",
       headers: {
@@ -408,7 +260,6 @@ export const api = {
     return res.json();
   },
 
-  // Levels config — cached in AsyncStorage, refreshed only if missing
   getLevels: async (): Promise<Array<{ level: number; title: string; min_points: number; description?: string }>> => {
     const CACHE_KEY = 'civiclens_levels_cache';
     try {
@@ -419,13 +270,12 @@ export const api = {
     const res = await fetch(`${API_URL}/levels`);
     if (!res.ok) throw new Error("Failed to fetch levels");
     const data = await res.json();
-    // Persist so subsequent app opens don't need to fetch again
     await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(data)).catch(() => {});
     return data;
   },
 
   getComments: async (issueId: number) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/issues/${issueId}/comments`, {
       headers: {
         Authorization: `Bearer ${token}`
@@ -436,7 +286,7 @@ export const api = {
   },
 
   addComment: async (issueId: number, content: string) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/issues/${issueId}/comments`, {
       method: "POST",
       headers: {
@@ -450,7 +300,7 @@ export const api = {
   },
 
   deleteComment: async (issueId: number, commentId: number) => {
-    const token = await AsyncStorage.getItem("access_token");
+    const token = await getToken();
     const res = await fetch(`${API_URL}/issues/${issueId}/comments/${commentId}`, {
       method: "DELETE",
       headers: {
@@ -461,13 +311,8 @@ export const api = {
     return res.json();
   },
 
-  /**
-   * Recalculates the current user's points from their actual live data.
-   * Call this to fix any inconsistency caused by test deletions.
-   * Formula: +1 per existing post + +1 per upvote received from others.
-   */
   recalculatePoints: async (): Promise<{ status: string; points: number; message: string }> => {
-    const token = await AsyncStorage.getItem('access_token');
+    const token = await getToken();
     const res = await fetch(`${API_URL}/users/me/recalculate-points`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },

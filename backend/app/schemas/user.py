@@ -9,7 +9,13 @@ class UserBase(BaseModel):
     username: str
     role: UserRole = UserRole.CITIZEN
 
-# Properties to receive via API on creation
+# Properties to receive via API on creation (Supabase Sync)
+class UserSync(BaseModel):
+    email: EmailStr
+    username: str
+    role: UserRole = UserRole.CITIZEN
+    
+# Properties to receive via API on creation (Legacy)
 class UserCreate(BaseModel):
     email: EmailStr
     username: Optional[str] = None

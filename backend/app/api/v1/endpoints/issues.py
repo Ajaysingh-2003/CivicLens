@@ -1,5 +1,7 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 import uuid
 
@@ -13,9 +15,12 @@ from app.models.comment import Comment
 from app.utils.profanity import validate_clean_text
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/classify", response_model=IssueClassifyResponse)
+@limiter.limit("5/minute")
 async def classify_issue_image(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user)
@@ -25,9 +30,15 @@ async def classify_issue_image(
     Uploads the image to temporary storage, analyzes it against the DB categories using CLIP,
     and returns a suggested category ID.
     """
-    # 1. Upload to Cloudflare R2 temporarily
+    if file.content_type not in ["image/jpeg", "image/png", "image/jpg"]:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG and PNG are allowed.")
+    
     file_bytes = await file.read()
-    temp_filename = f"temp/{uuid.uuid4()}_{file.filename}"
+    if len(file_bytes) > 5 * 1024 * 1024: # 5MB limit
+        raise HTTPException(status_code=400, detail="File size exceeds the 5MB limit.")
+        
+    file_extension = "jpg" if file.content_type in ["image/jpeg", "image/jpg"] else "png"
+    temp_filename = f"temp/{uuid.uuid4()}_{current_user.id}.{file_extension}"
     
     image_url = storage_service.upload_file(
         file_bytes=file_bytes,
@@ -113,7 +124,9 @@ def read_issues_map(
     return issue_service.get_issues(db, skip=skip, limit=limit)
 
 @router.post("/", response_model=IssueResponse)
+@limiter.limit("5/minute")
 def create_issue(
+    request: Request,
     *,
     db: Session = Depends(deps.get_db),
     issue_in: IssueCreate,
@@ -128,15 +141,22 @@ def create_issue(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # Strict server-side duplicate check (within 50 meters, same category)
+    duplicates = issue_service.find_nearby_duplicates(
+        db, lat=issue_in.lat, lng=issue_in.lng, category_id=issue_in.category_id, radius_m=50
+    )
+    if duplicates:
+        raise HTTPException(status_code=409, detail="A similar issue already exists at this location.")
+
     return issue_service.create_issue(db, issue_in=issue_in, reporter_id=current_user.id)
 
 @router.get("/", response_model=List[IssueResponse])
 def read_issues(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
     lat: Optional[float] = None,
     lng: Optional[float] = None,
-    radius_km: float = 5.0,
+    radius_km: float = Query(5.0, ge=0.1, le=50.0),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user)
 ) -> Any:
@@ -158,7 +178,9 @@ def read_issues_me(
     return issue_service.get_user_issues(db, user_id=current_user.id, skip=skip, limit=limit)
 
 @router.get("/{issue_id}", response_model=IssueResponse)
+@limiter.limit("60/minute")
 def read_issue_by_id(
+    request: Request,
     issue_id: int,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user)
@@ -182,6 +204,15 @@ def update_issue_status(
     """
     (Web App Admin Only) Change the state and record audit log.
     """
+    # Broken Access Control Fix: Ensure admin belongs to the correct city/department
+    issue = issue_service.get_issue(db, issue_id=issue_id)
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+        
+    if current_admin.role.name != "SUPER_ADMIN":
+        if issue.get("city_id") != current_admin.city_id:
+            raise HTTPException(status_code=403, detail="Not authorized to manage issues outside your city.")
+            
     issue = issue_service.update_issue_status(
         db, issue_id=issue_id, status_update=status_update, actor_id=current_admin.id
     )
@@ -190,7 +221,9 @@ def update_issue_status(
     return issue
 
 @router.post("/{issue_id}/vote", response_model=IssueResponse)
+@limiter.limit("10/minute")
 def vote_on_issue(
+    request: Request,
     *,
     db: Session = Depends(deps.get_db),
     issue_id: int,
@@ -203,7 +236,11 @@ def vote_on_issue(
     if vote_type not in [1, -1]:
         raise HTTPException(status_code=400, detail="Invalid vote_type. Must be 1 or -1.")
         
-    issue = issue_service.vote_issue(db, issue_id=issue_id, user_id=current_user.id, vote_type=vote_type)
+    try:
+        issue = issue_service.vote_issue(db, issue_id=issue_id, user_id=current_user.id, vote_type=vote_type)
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+        
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
     return issue
@@ -232,7 +269,9 @@ def delete_issue(
 
 
 @router.get("/{issue_id}/comments", response_model=List[CommentResponse])
+@limiter.limit("60/minute")
 def get_comments(
+    request: Request,
     issue_id: int,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_active_user)
@@ -258,7 +297,9 @@ def get_comments(
 
 
 @router.post("/{issue_id}/comments", response_model=CommentResponse)
+@limiter.limit("5/minute")
 def add_comment(
+    request: Request,
     issue_id: int,
     comment_in: CommentCreate,
     db: Session = Depends(deps.get_db),
@@ -322,7 +363,9 @@ def delete_comment(
     return {"status": "success", "message": "Comment deleted"}
 
 @router.post("/{issue_id}/report")
+@limiter.limit("5/minute")
 def report_issue(
+    request: Request,
     issue_id: int,
     report_data: ReportCreate,
     db: Session = Depends(deps.get_db),

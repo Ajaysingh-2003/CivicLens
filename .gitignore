@@ -36,3 +36,6 @@ pip-delete-this-directory.txt
 .DS_Store
 .DS_Store?
 Thumbs.db
+
+# Security checklist
+security_check.txt

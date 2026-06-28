@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../services/AuthContext';
 import { api } from '../services/api';
 import { useLevels } from '../hooks/useLevels';
+import ModerationRejectionModal from '../components/ModerationRejectionModal';
 
 export default function AccountDetailsScreen({ navigation }: any) {
   const { user, login, logout } = useAuth();
@@ -27,6 +28,7 @@ export default function AccountDetailsScreen({ navigation }: any) {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [updatingAccount, setUpdatingAccount] = useState(false);
+  const [rejectionMessage, setRejectionMessage] = useState('');
 
   const handleDeleteAccount = () => {
     Alert.alert(
@@ -59,7 +61,12 @@ export default function AccountDetailsScreen({ navigation }: any) {
       if (token) await login(token, updated);
       setIsEditingUsername(false);
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to update username");
+      const msg = err.message || "Failed to update username";
+      if (msg.includes('inappropriate') || msg.includes('taken')) {
+        setRejectionMessage(msg);
+      } else {
+        Alert.alert("Error", msg);
+      }
     } finally {
       setUpdatingAccount(false);
     }
@@ -395,6 +402,12 @@ export default function AccountDetailsScreen({ navigation }: any) {
           </View>
         </View>
       </Modal>
+
+      <ModerationRejectionModal
+        visible={!!rejectionMessage}
+        onClose={() => setRejectionMessage('')}
+        message={rejectionMessage}
+      />
     </SafeAreaView>
   );
 }

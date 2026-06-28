@@ -11,6 +11,7 @@ from app.models.issue_image import IssueImage
 from app.models.city import City
 from app.schemas.issue import IssueCreate, IssueUpdateStatus
 from app.services.user_service import record_points, revoke_issue_points
+from app.services import storage_service
 from app.models.point_transaction import PointReason
 
 def format_issue(issue: Issue) -> Dict[str, Any]:
@@ -102,7 +103,7 @@ def create_issue(db: Session, issue_in: IssueCreate, reporter_id: int) -> dict:
     if issue_in.image_url:
         image_obj = IssueImage(
             issue_id=db_obj.id,
-            image_url=issue_in.image_url
+            image_url=str(issue_in.image_url)
         )
         db.add(image_obj)
         
@@ -204,6 +205,10 @@ def delete_issue(db: Session, issue_id: int) -> bool:
     if reporter:
         revoke_issue_points(db, reporter, issue_id)
         db.flush()  # Persist points change before delete cascade expires the user object
+    
+    # Delete associated images from S3 to prevent data bloat
+    for img in issue.images:
+        storage_service.delete_avatar(img.image_url)
     db.delete(issue)
     db.commit()
     return True
@@ -213,6 +218,9 @@ def vote_issue(db: Session, issue_id: int, user_id: int, vote_type: int) -> Opti
     issue = db.query(Issue).filter(Issue.id == issue_id).first()
     if not issue:
         return None
+        
+    if user_id == issue.reporter_id:
+        raise ValueError("You cannot vote on your own issue.")
 
     reporter = db.query(User).filter(User.id == issue.reporter_id).first()
     point_change = 0

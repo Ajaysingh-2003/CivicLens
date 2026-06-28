@@ -14,6 +14,7 @@ Shapely>=2.0.0
 python-multipart
 slowapi>=0.1.9
 geopandas
+redis
 
 boto3
 better_profanity

@@ -18,16 +18,31 @@ interface IssueCardProps {
   issue: any;
   onPress: () => void;
   onDelete?: (id: number) => void;
+  onReport?: (id: number) => void;
   isMyReport?: boolean;
+  currentUserId?: number;
 }
 
-export default function IssueCard({ issue, onPress, onDelete, isMyReport }: IssueCardProps) {
+export default function IssueCard({ issue, onPress, onDelete, onReport, isMyReport, currentUserId }: IssueCardProps) {
   const netVotes = (issue.upvotes || 0) - (issue.downvotes || 0);
+  const canReport = !isMyReport && (currentUserId !== undefined ? issue.reporter_id !== currentUserId : true);
 
   const handleLongPress = () => {
     if (isMyReport && onDelete) {
       onDelete(issue.id);
     }
+  };
+
+  const handleReportMenu = () => {
+    if (!onReport) return;
+    Alert.alert(
+      "Post Options",
+      "What would you like to do?",
+      [
+        { text: "Report", style: "destructive", onPress: () => onReport(issue.id) },
+        { text: "Cancel", style: "cancel" }
+      ]
+    );
   };
 
   return (
@@ -82,6 +97,14 @@ export default function IssueCard({ issue, onPress, onDelete, isMyReport }: Issu
           <Ionicons name="chatbubble-outline" size={18} color="#718096" />
           <Text style={styles.commentBtnText}>{issue.comments_count}</Text>
         </TouchableOpacity>
+
+        <View style={{ flex: 1 }} />
+        
+        {canReport && (
+          <TouchableOpacity style={styles.moreAction} onPress={handleReportMenu}>
+            <Ionicons name="ellipsis-vertical" size={20} color="#718096" />
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -111,4 +134,5 @@ const styles = StyleSheet.create({
   commentBtnText: { fontSize: 14, color: '#4A5568', fontWeight: '600' },
   categoryChip: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 },
   categoryChipText: { fontSize: 11, fontWeight: '700' },
+  moreAction: { padding: 6, borderRadius: 16 },
 });

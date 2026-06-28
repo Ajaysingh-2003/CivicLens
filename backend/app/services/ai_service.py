@@ -78,3 +78,40 @@ def classify_image(image_bytes: bytes, categories: List[str], moderation_labels:
             
     # Fallback (should theoretically never hit)
     return categories[0]
+
+def moderate_avatar(image_bytes: bytes) -> None:
+    """
+    Moderates a profile picture upload. Raises ValueError if the image
+    is classified as inappropriate.
+    """
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    image.thumbnail((500, 500))
+    
+    mod_labels = [
+        "nudity or explicit sexual content",
+        "gore, blood, or extreme violence",
+        "hate symbols or offensive imagery",
+        "illegal drugs or weapons"
+    ]
+    safe_labels = [
+        "a normal profile picture of a human face",
+        "a generic avatar illustration",
+        "a photo of an animal, pet, or nature",
+        "a solid color or abstract background"
+    ]
+    all_labels = safe_labels + mod_labels
+    
+    text_features = get_text_features(all_labels)
+    
+    inputs = processor(images=image, return_tensors="pt").to(device)
+    with torch.no_grad():
+        image_features = model.get_image_features(**inputs)
+        image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)
+        
+    similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
+    
+    best_idx = similarity[0].argmax().item()
+    top_result = all_labels[best_idx]
+    
+    if top_result in mod_labels:
+        raise ValueError(f"Image rejected. Identified as: {top_result}")

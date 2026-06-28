@@ -1,52 +1,50 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Session } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 import { api } from './api';
 
 type AuthContextType = {
   user: any;
+  session: Session | null;
   isLoading: boolean;
-  login: (token: string, userData: any) => Promise<void>;
   logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<any>(null); // Our DB user profile
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored token on app boot
-    const bootstrapAsync = async () => {
-      try {
-        const token = await AsyncStorage.getItem("access_token");
-        if (token) {
-          const userData = await api.getMe();
-          setUser(userData);
-        }
-      } catch (e) {
-        // Token invalid or network error
-        await AsyncStorage.removeItem("access_token");
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
 
-    bootstrapAsync();
+    supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      if (session) {
+        // Fetch user profile from our backend
+        try {
+          const profile = await api.getMe();
+          setUser(profile);
+        } catch (e) {
+          console.error("Failed to fetch user profile", e);
+        }
+      } else {
+        setUser(null);
+      }
+      setIsLoading(false);
+    });
   }, []);
 
-  const login = async (token: string, userData: any) => {
-    await AsyncStorage.setItem("access_token", token);
-    setUser(userData);
-  };
-
   const logout = async () => {
-    await AsyncStorage.removeItem("access_token");
-    setUser(null);
+    await supabase.auth.signOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, session, isLoading, logout }}>
       {children}
     </AuthContext.Provider>
   );
@@ -58,4 +56,4 @@ export const useAuth = () => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
+}

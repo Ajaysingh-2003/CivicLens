@@ -30,7 +30,7 @@ def upload_avatar(file: UploadFile, user_id: int) -> str:
 
     # Generate a unique filename using timestamp to prevent caching issues across devices
     timestamp = int(datetime.datetime.now().timestamp())
-    file_extension = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    file_extension = "jpg" if file.content_type in ["image/jpeg", "image/jpg"] else "png"
     object_key = f"avatars/{user_id}_{timestamp}.{file_extension}"
 
     try:
