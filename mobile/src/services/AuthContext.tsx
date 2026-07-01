@@ -8,6 +8,7 @@ type AuthContextType = {
   session: Session | null;
   isLoading: boolean;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,7 +31,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const profile = await api.getMe();
           setUser(profile);
         } catch (e) {
-          console.error("Failed to fetch user profile", e);
+          console.warn("User not found in Postgres yet (likely in the middle of registration). Delaying redirect.");
+          setUser(null);
         }
       } else {
         setUser(null);
@@ -43,8 +45,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const refreshUser = async () => {
+    if (session) {
+      try {
+        const profile = await api.getMe();
+        setUser(profile);
+      } catch (e) {
+        console.error("Failed to fetch user profile", e);
+      }
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, logout }}>
+    <AuthContext.Provider value={{ user, session, isLoading, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

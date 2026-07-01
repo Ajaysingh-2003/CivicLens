@@ -13,7 +13,7 @@ export default function OtpScreen({ route, navigation }: any) {
   const [timeLeft, setTimeLeft] = useState(60);
   const [resending, setResending] = useState(false);
   
-  const { login } = useAuth();
+  const { refreshUser } = useAuth();
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -41,9 +41,7 @@ export default function OtpScreen({ route, navigation }: any) {
       }
       
       // After getting token, we fetch user profile to complete login
-      await login(data.access_token, null); 
-      const user = await api.getMe();
-      await login(data.access_token, user);
+      await refreshUser();
       
     } catch (err: any) {
       setError(err.message);

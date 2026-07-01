@@ -14,7 +14,7 @@ export default function MyReportsScreen({ navigation }: any) {
   const [issues, setIssues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const { login } = useAuth();
+  const { refreshUser } = useAuth();
   
   const [isReportModalVisible, setReportModalVisible] = useState(false);
   const [reportImageUri, setReportImageUri] = useState<string | null>(null);
@@ -95,9 +95,7 @@ export default function MyReportsScreen({ navigation }: any) {
               DeviceEventEmitter.emit('refreshFeed'); // refresh home feed
               // Refresh user points
               try {
-                const updatedUser = await api.getMe();
-                const token = await AsyncStorage.getItem("access_token");
-                if (token) login(token, updatedUser);
+                await refreshUser();
               } catch (e) {
                 console.log("Failed to refresh user points", e);
               }
@@ -166,9 +164,7 @@ export default function MyReportsScreen({ navigation }: any) {
           setReportImageUri(null);
           loadIssues(); // Refresh the list of reports
           try {
-            const updatedUser = await api.getMe();
-            const token = await AsyncStorage.getItem("access_token");
-            if (token) login(token, updatedUser);
+            await refreshUser();
           } catch (e) {
             console.log("Failed to refresh user points", e);
           }

@@ -12,7 +12,7 @@ import { useLevels } from '../hooks/useLevels';
 import ModerationRejectionModal from '../components/ModerationRejectionModal';
 
 export default function AccountDetailsScreen({ navigation }: any) {
-  const { user, login, logout } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const levelsConfig = useLevels();
 
   // Account Details states
@@ -29,36 +29,29 @@ export default function AccountDetailsScreen({ navigation }: any) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [updatingAccount, setUpdatingAccount] = useState(false);
   const [rejectionMessage, setRejectionMessage] = useState('');
+  const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete Account",
-      "Are you absolutely sure? This action cannot be undone. Your reported issues will remain visible as 'Deleted User'.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete My Account",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await api.deleteAccount();
-              await logout();
-            } catch (err: any) {
-              Alert.alert("Error", err.message || "Failed to delete account");
-            }
-          }
-        }
-      ]
-    );
+    setIsDeleteModalVisible(true);
+  };
+
+  const executeDeleteAccount = async () => {
+    setUpdatingAccount(true);
+    try {
+      await api.deleteAccount();
+      await logout();
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to delete account");
+      setUpdatingAccount(false);
+    }
   };
 
   const handleSaveUsername = async () => {
     if (!editUsernameText.trim()) return;
     setUpdatingAccount(true);
     try {
-      const updated = await api.updateUserMe({ username: editUsernameText.trim() });
-      const token = await AsyncStorage.getItem('access_token');
-      if (token) await login(token, updated);
+      await api.updateUserMe({ username: editUsernameText.trim() });
+      await refreshUser();
       setIsEditingUsername(false);
     } catch (err: any) {
       const msg = err.message || "Failed to update username";
@@ -75,9 +68,8 @@ export default function AccountDetailsScreen({ navigation }: any) {
   const handleToggleNotifications = async (val: boolean) => {
     setUpdatingAccount(true);
     try {
-      const updated = await api.updateUserMe({ notifications_enabled: val });
-      const token = await AsyncStorage.getItem('access_token');
-      if (token) await login(token, updated);
+      await api.updateUserMe({ notifications_enabled: val });
+      await refreshUser();
     } catch (err: any) {
       Alert.alert("Error", err.message || "Failed to update notifications");
     } finally {
@@ -403,6 +395,30 @@ export default function AccountDetailsScreen({ navigation }: any) {
         </View>
       </Modal>
 
+      {/* Delete Account Modal */}
+      <Modal visible={isDeleteModalVisible} transparent animationType="fade" onRequestClose={() => setIsDeleteModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.deleteIconContainer}>
+              <Ionicons name="warning" size={32} color="#D32F2F" />
+            </View>
+            <Text style={styles.modalTitle}>Delete Account</Text>
+            <Text style={styles.modalSubtext}>
+              Deleting your account is permanent and cannot be undone. Any issues you've reported will remain visible under "Deleted User".
+            </Text>
+            
+            <View style={styles.deleteActionRow}>
+              <TouchableOpacity style={styles.deleteCancelBtn} onPress={() => setIsDeleteModalVisible(false)} disabled={updatingAccount}>
+                <Text style={styles.deleteCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteConfirmBtn} onPress={executeDeleteAccount} disabled={updatingAccount}>
+                {updatingAccount ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.deleteConfirmText}>Delete</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <ModerationRejectionModal
         visible={!!rejectionMessage}
         onClose={() => setRejectionMessage('')}
@@ -505,4 +521,11 @@ const styles = StyleSheet.create({
   modalPrimaryBtn: { backgroundColor: '#4CAF50', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 10 },
   modalPrimaryText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   modalCancelText: { color: '#888', fontSize: 15, textAlign: 'center', marginTop: 12, padding: 8 },
+  
+  deleteIconContainer: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#FFEBEE', justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 20 },
+  deleteActionRow: { flexDirection: 'row', gap: 12, marginTop: 28 },
+  deleteCancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#F5F5F5', alignItems: 'center', justifyContent: 'center' },
+  deleteCancelText: { color: '#666', fontSize: 16, fontWeight: '600' },
+  deleteConfirmBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#D32F2F', alignItems: 'center', justifyContent: 'center' },
+  deleteConfirmText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

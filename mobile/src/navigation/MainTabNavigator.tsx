@@ -28,7 +28,7 @@ function CameraTabButton({ onPress }: { onPress: () => void }) {
 
 export default function MainTabNavigator() {
   const insets = useSafeAreaInsets();
-  const { user, login } = useAuth();
+  const { user, refreshUser } = useAuth();
   const navigation = useNavigation<any>();
 
   const [isReportModalVisible, setReportModalVisible] = useState(false);
@@ -129,9 +129,7 @@ export default function MainTabNavigator() {
           setReportImageUri(null);
           DeviceEventEmitter.emit('refreshFeed');
           try {
-            const updatedUser = await api.getMe();
-            const token = await AsyncStorage.getItem("access_token");
-            if (token) login(token, updatedUser);
+            await refreshUser();
           } catch (e) {
             console.log("Failed to refresh user points", e);
           }

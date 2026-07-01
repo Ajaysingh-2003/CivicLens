@@ -5,13 +5,37 @@ import requests
 from transformers import CLIPProcessor, CLIPModel
 from typing import List
 
-print("Loading CLIP Model into memory... This might take a few seconds.")
-model_id = "openai/clip-vit-base-patch32"
-device = "cuda" if torch.cuda.is_available() else "cpu"
+import threading
 
-model = CLIPModel.from_pretrained(model_id).to(device)
-processor = CLIPProcessor.from_pretrained(model_id)
-print("CLIP Model Loaded successfully!")
+_model = None
+_processor = None
+_device = "cuda" if torch.cuda.is_available() else "cpu"
+_model_lock = threading.Lock()
+
+def _load_model():
+    global _model, _processor
+    if _model is None:
+        with _model_lock:
+            if _model is None:
+                print("Loading CLIP Model into memory... (Running in background)")
+                try:
+                    m = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(_device)
+                    p = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+                    _model = m
+                    _processor = p
+                    print("CLIP Model Loaded successfully!")
+                except Exception as e:
+                    print(f"Error loading CLIP Model: {e}")
+
+# Trigger background load immediately
+threading.Thread(target=_load_model, daemon=True).start()
+
+def _ensure_model_loaded():
+    if _model is None:
+        print("Waiting for CLIP Model to finish loading...")
+        with _model_lock:
+            pass
+    return _model, _processor
 
 # Cache for text features to avoid re-encoding on every request
 _cached_labels = None
@@ -22,7 +46,9 @@ def get_text_features(labels: List[str]):
     if _cached_labels == labels and _cached_text_features is not None:
         return _cached_text_features
     
-    inputs = processor(text=labels, return_tensors="pt", padding=True).to(device)
+    model, processor = _ensure_model_loaded()
+    
+    inputs = processor(text=labels, return_tensors="pt", padding=True).to(_device)
     with torch.no_grad():
         text_features = model.get_text_features(**inputs)
         # Normalize
@@ -54,8 +80,10 @@ def classify_image(image_bytes: bytes, categories: List[str], moderation_labels:
     # Get cached text features (super fast after first run)
     text_features = get_text_features(all_labels)
     
+    model, processor = _ensure_model_loaded()
+    
     # Process image
-    inputs = processor(images=image, return_tensors="pt").to(device)
+    inputs = processor(images=image, return_tensors="pt").to(_device)
     with torch.no_grad():
         image_features = model.get_image_features(**inputs)
         image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)
@@ -103,7 +131,9 @@ def moderate_avatar(image_bytes: bytes) -> None:
     
     text_features = get_text_features(all_labels)
     
-    inputs = processor(images=image, return_tensors="pt").to(device)
+    model, processor = _ensure_model_loaded()
+    
+    inputs = processor(images=image, return_tensors="pt").to(_device)
     with torch.no_grad():
         image_features = model.get_image_features(**inputs)
         image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)

@@ -10,20 +10,11 @@ class UserBase(BaseModel):
     role: UserRole = UserRole.CITIZEN
 
 # Properties to receive via API on creation (Supabase Sync)
+# NOTE: role is intentionally NOT accepted from the client to prevent privilege escalation.
 class UserSync(BaseModel):
     email: EmailStr
     username: str
-    role: UserRole = UserRole.CITIZEN
-    
-# Properties to receive via API on creation (Legacy)
-class UserCreate(BaseModel):
-    email: EmailStr
-    username: Optional[str] = None
-    role: UserRole = UserRole.CITIZEN
-    password: str
-    state_id: Optional[int] = None
     city_id: Optional[int] = None
-    department_id: Optional[int] = None
 
 # Properties to return to client (no hashed_password)
 class UserResponse(UserBase):
@@ -57,10 +48,4 @@ class UserUpdate(BaseModel):
     username: Optional[str] = None
     notifications_enabled: Optional[bool] = None
 
-class PasswordChangeRequest(BaseModel):
-    current_password: str
 
-class PasswordChange(BaseModel):
-    current_password: str
-    new_password: str
-    otp_code: str

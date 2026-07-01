@@ -25,7 +25,12 @@ except Exception as e:
 # Initialize the rate limiter using Redis storage (keyed by client IP address)
 limiter = Limiter(key_func=get_remote_address, storage_uri=redis_uri)
 
-app = FastAPI(title=settings.PROJECT_NAME)
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    docs_url=None,       # Disable Swagger UI (/docs)
+    redoc_url=None,      # Disable ReDoc (/redoc)
+    openapi_url=None,    # Disable OpenAPI JSON schema (/openapi.json)
+)
 
 # Attach limiter to app state so endpoints can access it
 app.state.limiter = limiter

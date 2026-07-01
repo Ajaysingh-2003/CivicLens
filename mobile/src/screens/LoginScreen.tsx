@@ -12,7 +12,7 @@ export default function LoginScreen({ navigation }: any) {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   
-  const { login } = useAuth();
+  const { refreshUser } = useAuth();
 
   const handleLogin = async () => {
     if (!email || !password) {

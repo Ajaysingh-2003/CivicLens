@@ -8,7 +8,7 @@ import re
 from app.api import deps
 from app.schemas.user import UserResponse, UserUpdate, UserSync
 from app.services import user_service, storage_service, ai_service
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.utils.profanity import validate_clean_text
 
 router = APIRouter()
@@ -33,10 +33,10 @@ def sync_user(
         return user
 
     # 2. Validate username
-    if not re.match(r'^[a-zA-Z0-9_.]{3,30}$', data.username):
+    if not re.match(r'^[a-zA-Z0-9_.-]{3,30}$', data.username):
         raise HTTPException(
             status_code=400, 
-            detail="Username must be 3-30 characters long and can only contain letters, numbers, underscores, and periods."
+            detail="Username must be 3-30 characters long and can only contain letters, numbers, underscores, hyphens, and periods."
         )
     try:
         validate_clean_text(data.username, "Username", is_username=True)
@@ -51,12 +51,14 @@ def sync_user(
             detail="Username is already taken"
         )
 
-    # 4. Create user in local DB
+    # 4. Create user in local DB (role is ALWAYS CITIZEN — never trust the client)
     new_user = User(
         supabase_uid=sub,
         email=data.email,
         username=data.username,
-        role=data.role,
+        role=UserRole.CITIZEN,
+        city_id=data.city_id,
+        level_id=1,  # Default level for new users
         is_email_verified=True # Supabase handles email verification
     )
     db.add(new_user)
@@ -82,16 +84,31 @@ def upload_avatar(
     current_user: User = Depends(deps.get_current_active_user)
 ) -> Any:
     """Uploads a new avatar to Cloudflare R2 and updates the user record."""
+    # Guard: Read file in chunks to enforce 5MB limit without loading everything into RAM
+    MAX_AVATAR_SIZE = 5 * 1024 * 1024  # 5MB
+    chunks = []
+    total_size = 0
+    while True:
+        chunk = file.file.read(64 * 1024)  # 64KB chunks
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > MAX_AVATAR_SIZE:
+            raise HTTPException(status_code=413, detail="File size exceeds the 5MB limit.")
+        chunks.append(chunk)
+    file_bytes = b"".join(chunks)
+
     try:
-        file_bytes = file.file.read()
         ai_service.moderate_avatar(file_bytes)
-        file.file.seek(0)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     if current_user.avatar_url:
         storage_service.delete_avatar(current_user.avatar_url)
-        
+
+    # Reset the file stream with the already-read bytes for the storage service
+    import io
+    file.file = io.BytesIO(file_bytes)
     new_avatar_url = storage_service.upload_avatar(file, current_user.id)
     current_user.avatar_url = new_avatar_url
     db.commit()
@@ -131,9 +148,22 @@ def delete_user_me(
         for img in images:
             storage_service.delete_avatar(img.image_url)
 
+    # Store supabase_uid before deleting the user row (which detaches the object)
+    supabase_uid = current_user.supabase_uid
+
+    # Delete from local Postgres
     success = user_service.delete_user(db, current_user.id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete user account")
+        
+    # Delete from Supabase Auth schema using raw SQL
+    from sqlalchemy import text
+    try:
+        # Need a fresh connection or execute on the db session
+        db.execute(text("DELETE FROM auth.users WHERE id = :uid"), {"uid": supabase_uid})
+        db.commit()
+    except Exception as e:
+        print(f"Failed to delete auth user from Supabase: {e}")
 
     return {"status": "success", "message": "User account deleted"}
 
@@ -148,10 +178,10 @@ def update_user_me(
 ) -> Any:
     """Update username or preferences."""
     if data.username is not None and data.username != current_user.username:
-        if not re.match(r'^[a-zA-Z0-9_.]{3,30}$', data.username):
+        if not re.match(r'^[a-zA-Z0-9_.-]{3,30}$', data.username):
             raise HTTPException(
                 status_code=400, 
-                detail="Username must be 3-30 characters long and can only contain letters, numbers, underscores, and periods."
+                detail="Username must be 3-30 characters long and can only contain letters, numbers, underscores, hyphens, and periods."
             )
         try:
             validate_clean_text(data.username, "Username", is_username=True)

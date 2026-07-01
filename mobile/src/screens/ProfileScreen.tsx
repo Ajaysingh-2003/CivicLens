@@ -10,7 +10,7 @@ import { useLevels } from '../hooks/useLevels';
 import ModerationRejectionModal from '../components/ModerationRejectionModal';
 
 export default function ProfileScreen({ navigation }: any) {
-  const { user, login, logout } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const levelsConfig = useLevels();
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -33,9 +33,8 @@ export default function ProfileScreen({ navigation }: any) {
       if (!result.canceled && result.assets?.length > 0) {
         setUploadingAvatar(true);
         try {
-          const updatedUser = await api.uploadAvatar(result.assets[0].uri);
-          const token = await AsyncStorage.getItem('access_token');
-          if (token) await login(token, updatedUser);
+          await api.uploadAvatar(result.assets[0].uri);
+          await refreshUser();
           Alert.alert('Success', 'Avatar updated!');
         } catch (err: any) {
           const msg = err.message || 'Failed to upload avatar';
@@ -74,9 +73,8 @@ export default function ProfileScreen({ navigation }: any) {
     setAvatarModalVisible(false);
     try {
       setUploadingAvatar(true);
-      const updatedUser = await api.removeAvatar();
-      const token = await AsyncStorage.getItem('access_token');
-      if (token) await login(token, updatedUser);
+      await api.removeAvatar();
+      await refreshUser();
       Alert.alert('Success', 'Avatar removed.');
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to remove avatar');
