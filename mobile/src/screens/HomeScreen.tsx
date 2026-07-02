@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Animated, DeviceEventEmitter, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,55 +53,31 @@ export default function HomeScreen({ navigation, onReportPress }: any) {
   const { user } = useAuth();
   const levelsConfig = useLevels();
 
-  const [issues, setIssues] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [reportIssueId, setReportIssueId] = useState<number | null>(null);
 
-  const loadIssues = useCallback(async () => {
-    setLoading(true);
-    try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        // Fallback to no location if denied (backend will return generic newest)
-        const data = await api.getIssues();
-        setIssues(data);
-        return;
-      }
-      const location = await Location.getCurrentPositionAsync({});
-      const data = await api.getIssues(location.coords.latitude, location.coords.longitude, 5.0);
-      setIssues(data);
-    } catch (err: any) {
-      console.log('Error loading issues:', err);
-    } finally {
-      setLoading(false);
+  const fetchIssues = async () => {
+    let { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      return api.getIssues();
     }
-  }, []);
+    const location = await Location.getCurrentPositionAsync({});
+    return api.getIssues(location.coords.latitude, location.coords.longitude, 5.0);
+  };
+
+  const { data: issues = [], isLoading: loading, isRefetching: refreshing, refetch } = useQuery({
+    queryKey: ['issues', 'nearby'],
+    queryFn: fetchIssues,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const onRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
   useEffect(() => {
-    loadIssues();
-    const subscription = DeviceEventEmitter.addListener('refreshFeed', loadIssues);
+    const subscription = DeviceEventEmitter.addListener('refreshFeed', () => refetch());
     return () => subscription.remove();
-  }, [loadIssues]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        const data = await api.getIssues();
-        setIssues(data);
-        return;
-      }
-      const location = await Location.getCurrentPositionAsync({});
-      const data = await api.getIssues(location.coords.latitude, location.coords.longitude, 5.0);
-      setIssues(data);
-    } catch (err) {
-      console.log('Refresh error:', err);
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
+  }, [refetch]);
 
   const displayName = user?.username || 'Citizen';
   const displayTitle = user?.title || 'Citizen Reporter';

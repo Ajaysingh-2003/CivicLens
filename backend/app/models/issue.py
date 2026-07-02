@@ -6,6 +6,7 @@ import enum
 from app.db.base import Base
 
 class IssueStatus(str, enum.Enum):
+    PENDING_MODERATION = "PENDING_MODERATION"
     PENDING = "PENDING"
     ASSIGNED = "ASSIGNED"
     IN_PROGRESS = "IN_PROGRESS"

@@ -10,22 +10,7 @@ const getToken = async () => {
 };
 
 export const api = {
-  syncUser: async (email: string, username: string, city_id?: number, tokenOverride?: string) => {
-    const token = tokenOverride || await getToken();
-    const res = await fetch(`${API_URL}/users/sync`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ email, username, city_id }),
-    });
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.detail || "Sync failed.");
-    }
-    return res.json();
-  },
+
 
   getStates: async () => {
     const res = await fetch(`${API_URL}/locations/states`);

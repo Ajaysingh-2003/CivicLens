@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query, BackgroundTasks
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
@@ -12,7 +12,52 @@ from app.services import issue_service, storage_service, ai_service
 from app.models.user import User
 from app.models.category import Category
 from app.models.comment import Comment
+from app.models.issue import Issue, IssueStatus
+from app.db.session import SessionLocal
 from app.utils.profanity import validate_clean_text
+import httpx
+
+def moderate_issue_background(issue_id: int, image_url: str):
+    if not image_url:
+        return
+        
+    db = SessionLocal()
+    try:
+        response = httpx.get(image_url)
+        if response.status_code != 200:
+            return
+            
+        file_bytes = response.content
+        categories = db.query(Category).all()
+        category_names = [c.name for c in categories]
+        moderation_labels = [
+            "A photo of a person's face or selfie",
+            "A photo of a pet or animal",
+            "A photo of food or a meal",
+            "A screenshot, meme, or text document",
+            "Explicit, sexual, or nude content",
+            "Violent or hateful imagery"
+        ]
+        
+        try:
+            ai_service.classify_image(file_bytes, category_names, moderation_labels)
+            issue = db.query(Issue).get(issue_id)
+            if issue and issue.status == IssueStatus.PENDING_MODERATION:
+                issue.status = IssueStatus.PENDING
+                db.commit()
+        except ValueError as e:
+            issue = db.query(Issue).get(issue_id)
+            if issue:
+                issue.status = IssueStatus.REJECTED
+                db.commit()
+    except Exception as e:
+        print(f"Background moderation failed: {e}")
+        issue = db.query(Issue).get(issue_id)
+        if issue and issue.status == IssueStatus.PENDING_MODERATION:
+            issue.status = IssueStatus.PENDING
+            db.commit()
+    finally:
+        db.close()
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -55,25 +100,9 @@ async def classify_issue_image(
         
     category_names = [c.name for c in categories]
     
-    # 3. Classify the image with moderation
-    moderation_labels = [
-        "A photo of a person's face or selfie",
-        "A photo of a pet or animal",
-        "A photo of food or a meal",
-        "A screenshot, meme, or text document",
-        "Explicit, sexual, or nude content",
-        "Violent or hateful imagery"
-    ]
-    
-    try:
-        suggested_name = ai_service.classify_image(file_bytes, category_names, moderation_labels)
-    except ValueError as e:
-        # Caught a moderation rejection
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        # Fallback gracefully if AI fails for other reasons, default to first category (e.g. Other)
-        print(f"AI Classification Failed: {e}")
-        suggested_name = category_names[-1] # Usually "Other" is at the end
+    # We removed synchronous AI classification to make the UI instant.
+    # We will just suggest the first category or 'Other'
+    suggested_name = "Other" if "Other" in category_names else category_names[0]
         
     suggested_category = next(c for c in categories if c.name == suggested_name)
 
@@ -127,6 +156,7 @@ def read_issues_map(
 @limiter.limit("5/minute")
 def create_issue(
     request: Request,
+    background_tasks: BackgroundTasks,
     *,
     db: Session = Depends(deps.get_db),
     issue_in: IssueCreate,
@@ -148,7 +178,12 @@ def create_issue(
     if duplicates:
         raise HTTPException(status_code=409, detail="A similar issue already exists at this location.")
 
-    return issue_service.create_issue(db, issue_in=issue_in, reporter_id=current_user.id)
+    issue = issue_service.create_issue(db, issue_in=issue_in, reporter_id=current_user.id)
+    
+    if issue_in.image_url:
+        background_tasks.add_task(moderate_issue_background, issue["id"], str(issue_in.image_url))
+        
+    return issue
 
 @router.get("/", response_model=List[IssueResponse])
 def read_issues(

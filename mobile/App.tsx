@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import SplashScreen from './components/AnimatedSplash';
@@ -49,14 +50,18 @@ function AppNavigator() {
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+const queryClient = new QueryClient();
+
 export default function App() {
   return (
-    <SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
       <AuthProvider>
         <NavigationContainer>
           <AppNavigator />
         </NavigationContainer>
       </AuthProvider>
     </SafeAreaProvider>
+    </QueryClientProvider>
   );
 }

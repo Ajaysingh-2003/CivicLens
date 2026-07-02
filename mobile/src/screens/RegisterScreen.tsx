@@ -113,12 +113,14 @@ export default function RegisterScreen({ navigation }: any) {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            username: username,
+            city_id: Number(selectedCity)
+          }
+        }
       });
       if (error) throw error;
-
-      // Sync the user to our Postgres DB (role is hardcoded server-side as CITIZEN)
-      // Pass the token directly because getSession() might have an async delay
-      await api.syncUser(email, username, Number(selectedCity), data.session?.access_token);
 
       setSuccess(true);
       // Delay the refresh User call until the user clicks the button on the success modal

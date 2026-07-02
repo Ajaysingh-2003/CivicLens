@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, Alert, TouchableOpacity, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,9 +12,7 @@ import IssueCard from '../components/IssueCard';
 import ReportIncidentModal from '../components/ReportIncidentModal';
 
 export default function MyReportsScreen({ navigation }: any) {
-  const [issues, setIssues] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+
   const { refreshUser } = useAuth();
   
   const [isReportModalVisible, setReportModalVisible] = useState(false);
@@ -49,35 +48,20 @@ export default function MyReportsScreen({ navigation }: any) {
     }
   };
 
-  const loadIssues = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await api.getMyIssues();
-      setIssues(data);
-    } catch (err: any) {
-      console.log('Error loading issues:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: issues = [], isLoading: loading, isRefetching: refreshing, refetch } = useQuery({
+    queryKey: ['my-issues'],
+    queryFn: api.getMyIssues,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const onRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
   useEffect(() => {
-    loadIssues();
-    const subscription = DeviceEventEmitter.addListener('refreshFeed', loadIssues);
+    const subscription = DeviceEventEmitter.addListener('refreshFeed', () => refetch());
     return () => subscription.remove();
-  }, [loadIssues]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      const data = await api.getMyIssues();
-      setIssues(data);
-    } catch (err) {
-      console.log('Refresh error:', err);
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
+  }, [refetch]);
 
   const handleDeleteIssue = (issueId: number) => {
     Alert.alert(
@@ -91,7 +75,7 @@ export default function MyReportsScreen({ navigation }: any) {
           onPress: async () => {
             try {
               await api.deleteIssue(issueId);
-              loadIssues(); // refresh the list
+              refetch(); // refresh the list
               DeviceEventEmitter.emit('refreshFeed'); // refresh home feed
               // Refresh user points
               try {
@@ -162,7 +146,7 @@ export default function MyReportsScreen({ navigation }: any) {
         onSuccess={async () => {
           setReportModalVisible(false);
           setReportImageUri(null);
-          loadIssues(); // Refresh the list of reports
+          refetch(); // Refresh the list of reports
           try {
             await refreshUser();
           } catch (e) {

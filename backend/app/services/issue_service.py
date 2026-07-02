@@ -67,7 +67,7 @@ def create_issue(db: Session, issue_in: IssueCreate, reporter_id: int) -> dict:
     db_obj = Issue(
         title=issue_in.title,
         description=issue_in.description,
-        status=IssueStatus.PENDING,
+        status=IssueStatus.PENDING_MODERATION,
         priority=IssuePriority.LOW, # Default to LOW until upvoted
         category_id=issue_in.category_id,
         reporter_id=reporter_id,
@@ -122,6 +122,9 @@ def get_issues(
         selectinload(Issue.images),
         selectinload(Issue.comments)
     )
+
+    # Filter out pending moderation issues
+    query = query.filter(Issue.status != IssueStatus.PENDING_MODERATION)
 
     if lat is not None and lng is not None:
         user_point = f"SRID=4326;POINT({lng} {lat})"

@@ -15,57 +15,6 @@ router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 
-@router.post("/sync", response_model=UserResponse)
-@limiter.limit("5/minute")
-def sync_user(
-    request: Request,
-    data: UserSync,
-    db: Session = Depends(deps.get_db),
-    sub: str = Depends(deps.get_supabase_sub)
-) -> Any:
-    """
-    Sync a new user from Supabase to our local PostgreSQL database.
-    Expects a valid Supabase JWT in the Authorization header.
-    """
-    # 1. Check if user already exists
-    user = db.query(User).filter(User.supabase_uid == sub).first()
-    if user:
-        return user
-
-    # 2. Validate username
-    if not re.match(r'^[a-zA-Z0-9_.-]{3,30}$', data.username):
-        raise HTTPException(
-            status_code=400, 
-            detail="Username must be 3-30 characters long and can only contain letters, numbers, underscores, hyphens, and periods."
-        )
-    try:
-        validate_clean_text(data.username, "Username", is_username=True)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    # 3. Check username uniqueness
-    existing_username = db.query(User).filter(User.username == data.username).first()
-    if existing_username:
-        raise HTTPException(
-            status_code=400,
-            detail="Username is already taken"
-        )
-
-    # 4. Create user in local DB (role is ALWAYS CITIZEN — never trust the client)
-    new_user = User(
-        supabase_uid=sub,
-        email=data.email,
-        username=data.username,
-        role=UserRole.CITIZEN,
-        city_id=data.city_id,
-        level_id=1,  # Default level for new users
-        is_email_verified=True # Supabase handles email verification
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user
-
 
 @router.get("/me", response_model=UserResponse)
 def read_user_me(current_user: User = Depends(deps.get_current_active_user)) -> Any:
