@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     # Auth configuration
     SECRET_KEY: str # Legacy or generic
     SUPABASE_URL: str
+    AUTH_SCHEMA: str = "auth"
     SUPABASE_JWT_SECRET: Optional[str] = None # Optional fallback
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8 # 8 days

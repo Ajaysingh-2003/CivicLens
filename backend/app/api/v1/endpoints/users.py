@@ -9,6 +9,7 @@ from app.api import deps
 from app.schemas.user import UserResponse, UserUpdate, UserSync
 from app.services import user_service, storage_service, ai_service
 from app.models.user import User, UserRole
+from app.core.config import settings
 from app.utils.profanity import validate_clean_text
 
 router = APIRouter()
@@ -109,7 +110,7 @@ def delete_user_me(
     from sqlalchemy import text
     try:
         # Need a fresh connection or execute on the db session
-        db.execute(text("DELETE FROM auth.users WHERE id = :uid"), {"uid": supabase_uid})
+        db.execute(text(f"DELETE FROM {settings.AUTH_SCHEMA}.users WHERE id = :uid"), {"uid": supabase_uid})
         db.commit()
     except Exception as e:
         print(f"Failed to delete auth user from Supabase: {e}")
