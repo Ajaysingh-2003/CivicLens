@@ -39,6 +39,20 @@ export const api = {
     return res.json();
   },
 
+  registerPushToken: async (pushToken: string) => {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/users/me/push-token`, {
+      method: "POST",
+      headers: { 
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ token: pushToken })
+    });
+    if (!res.ok) throw new Error("Failed to register push token");
+    return res.json();
+  },
+
   getIssues: async (lat?: number, lng?: number, radiusKm: number = 5.0) => {
     const token = await getToken();
     let url = `${API_URL}/issues/?`;

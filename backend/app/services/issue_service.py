@@ -108,6 +108,9 @@ def create_issue(db: Session, issue_in: IssueCreate, reporter_id: int) -> dict:
         db.add(image_obj)
         
     db.commit()
+    
+    from app.services import notification_service
+    notification_service.notify_nearby_issue(db_obj.id)
 
     # Reload with eager-loaded relationships for proper response formatting
     return get_issue(db, db_obj.id)
@@ -265,6 +268,11 @@ def vote_issue(db: Session, issue_id: int, user_id: int, vote_type: int) -> Opti
         elif vote_type == -1:
             issue.downvotes += 1
             point_change -= 1
+            
+    # Milestone notification
+    if vote_type == 1 and issue.upvotes in [5, 25, 50, 100, 250, 500, 1000]:
+        from app.services import notification_service
+        notification_service.notify_upvote_milestone(issue.id, issue.upvotes)
 
     # Apply reputation changes to the reporter if someone else voted
     if reporter and point_change != 0 and user_id != issue.reporter_id:

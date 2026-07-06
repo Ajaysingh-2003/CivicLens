@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { api } from './api';
+import { registerForPushNotificationsAsync } from './notifications';
 
 type AuthContextType = {
   user: any;
@@ -30,6 +31,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const profile = await api.getMe();
           setUser(profile);
+          // Register for push notifications
+          registerForPushNotificationsAsync();
         } catch (e) {
           console.warn("User not found in Postgres yet (likely in the middle of registration). Delaying redirect.");
           setUser(null);

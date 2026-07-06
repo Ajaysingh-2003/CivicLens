@@ -1,13 +1,13 @@
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, Request, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, File, UploadFile, BackgroundTasks
 from sqlalchemy.orm import Session
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 import re
 
 from app.api import deps
-from app.schemas.user import UserResponse, UserUpdate, UserSync
-from app.services import user_service, storage_service, ai_service
+from app.schemas.user import UserResponse, UserUpdate, UserSync, PushTokenUpdate
+from app.services import user_service, storage_service, ai_service, notification_service
 from app.models.user import User, UserRole
 from app.core.config import settings
 from app.utils.profanity import validate_clean_text
@@ -24,6 +24,25 @@ def read_user_me(current_user: User = Depends(deps.get_current_active_user)) -> 
     """
     return current_user
 
+@router.post("/me/push-token")
+def register_push_token(
+    data: PushTokenUpdate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Register an Expo push token for the authenticated user.
+    """
+    was_none = current_user.push_token is None
+    
+    current_user.push_token = data.token
+    db.commit()
+    
+    if was_none:
+        background_tasks.add_task(notification_service.notify_welcome, current_user.id)
+        
+    return {"status": "success", "message": "Push token registered"}
 
 @router.post("/me/avatar", response_model=UserResponse)
 @limiter.limit("5/minute")

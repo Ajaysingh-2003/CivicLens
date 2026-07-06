@@ -8,7 +8,7 @@ import uuid
 from app.api import deps
 from app.schemas.issue import IssueCreate, IssueResponse, IssueUpdateStatus, IssueMapResponse, IssueClassifyResponse, DuplicateCheckRequest, DuplicateCheckResponse, ReportCreate
 from app.schemas.comment import CommentCreate, CommentResponse
-from app.services import issue_service, storage_service, ai_service
+from app.services import issue_service, storage_service, ai_service, notification_service
 from app.models.user import User
 from app.models.category import Category
 from app.models.comment import Comment
@@ -50,6 +50,8 @@ def moderate_issue_background(issue_id: int, image_url: str):
             if issue:
                 issue.status = IssueStatus.REJECTED
                 db.commit()
+                # Notify rejection
+                notification_service.notify_rejection(issue_id)
     except Exception as e:
         print(f"Background moderation failed: {e}")
         issue = db.query(Issue).get(issue_id)
@@ -231,6 +233,7 @@ def read_issue_by_id(
 @router.patch("/{issue_id}/status", response_model=IssueResponse)
 def update_issue_status(
     *,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(deps.get_db),
     issue_id: int,
     status_update: IssueUpdateStatus,
@@ -253,6 +256,10 @@ def update_issue_status(
     )
     if not issue:
         raise HTTPException(status_code=404, detail="Issue not found")
+        
+    # Notify user of status change
+    background_tasks.add_task(notification_service.notify_status_change, issue_id, status_update.status)
+        
     return issue
 
 @router.post("/{issue_id}/vote", response_model=IssueResponse)
@@ -335,6 +342,7 @@ def get_comments(
 @limiter.limit("5/minute")
 def add_comment(
     request: Request,
+    background_tasks: BackgroundTasks,
     issue_id: int,
     comment_in: CommentCreate,
     db: Session = Depends(deps.get_db),
@@ -362,6 +370,9 @@ def add_comment(
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
+    
+    # Notify reporter about new comment
+    background_tasks.add_task(notification_service.notify_new_comment, issue_id, current_user.id)
     
     return {
         "id": db_obj.id,

@@ -48,4 +48,7 @@ class UserUpdate(BaseModel):
     username: Optional[str] = None
     notifications_enabled: Optional[bool] = None
 
+class PushTokenUpdate(BaseModel):
+    token: str
+
 

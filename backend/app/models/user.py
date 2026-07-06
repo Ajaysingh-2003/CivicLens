@@ -31,6 +31,7 @@ class User(Base):
     level = relationship("Level", back_populates="users")
 
     avatar_url = Column(String, nullable=True)
+    push_token = Column(String, nullable=True)
 
     # Relations
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)

@@ -65,6 +65,11 @@ def record_points(
     db.add(txn)
     user.points = max((user.points or 0) + delta, 0)  # Floor at 0
     levelled_up = assign_level(db, user)
+    
+    if levelled_up:
+        from app.services import notification_service
+        notification_service.notify_level_up(user.id)
+        
     return levelled_up
 
 

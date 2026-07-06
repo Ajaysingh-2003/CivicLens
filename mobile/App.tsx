@@ -49,15 +49,38 @@ function AppNavigator() {
 }
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { createNavigationContainerRef } from '@react-navigation/native';
+import * as Notifications from 'expo-notifications';
+import { useEffect } from 'react';
 
 const queryClient = new QueryClient();
+export const navigationRef = createNavigationContainerRef<any>();
 
 export default function App() {
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+      if (data) {
+        if (navigationRef.isReady()) {
+          if (data.type === 'LEVEL_UP') {
+            // Wait for navigation container to be ready, then navigate to AccountDetails
+            navigationRef.navigate('AccountDetails');
+          } else if (data.issue_id) {
+            // Milestone, Nearby, Comment, Status update all have issue_id
+            navigationRef.navigate('IssueDetails', { issueId: data.issue_id });
+          }
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
       <AuthProvider>
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
           <AppNavigator />
         </NavigationContainer>
       </AuthProvider>
