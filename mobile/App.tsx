@@ -13,6 +13,7 @@ import MainTabNavigator from './src/navigation/MainTabNavigator';
 import IssueDetailsScreen from './src/screens/IssueDetailsScreen';
 import AccountDetailsScreen from './src/screens/AccountDetailsScreen';
 import MyReportsScreen from './src/screens/MyReportsScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -34,6 +35,7 @@ function AppNavigator() {
           <Stack.Screen name="IssueDetails" component={IssueDetailsScreen} />
           <Stack.Screen name="AccountDetails" component={AccountDetailsScreen} />
           <Stack.Screen name="MyReports" component={MyReportsScreen} />
+          <Stack.Screen name="Notifications" component={NotificationsScreen} />
         </>
       ) : (
         // Unauthorized Views

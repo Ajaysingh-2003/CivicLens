@@ -13,3 +13,4 @@ from app.models.state import State
 from app.models.city import City
 from app.models.point_transaction import PointTransaction
 from app.models.issue_report import IssueReport
+from app.models.notification import Notification

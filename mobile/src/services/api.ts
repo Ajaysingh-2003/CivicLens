@@ -53,6 +53,34 @@ export const api = {
     return res.json();
   },
 
+  getNotifications: async () => {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/users/me/notifications`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Failed to fetch notifications");
+    return res.json();
+  },
+
+  markNotificationRead: async (id: number) => {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/users/me/notifications/${id}/read`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Failed to mark notification as read");
+    return res.json();
+  },
+
+  getUnreadCount: async () => {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/users/me/notifications/unread-count`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Failed to fetch unread count");
+    return res.json();
+  },
+
   getIssues: async (lat?: number, lng?: number, radiusKm: number = 5.0) => {
     const token = await getToken();
     let url = `${API_URL}/issues/?`;

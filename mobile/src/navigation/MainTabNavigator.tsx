@@ -33,6 +33,28 @@ export default function MainTabNavigator() {
 
   const [isReportModalVisible, setReportModalVisible] = useState(false);
   const [reportImageUri, setReportImageUri] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  React.useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const result = await api.getUnreadCount();
+        setUnreadCount(result.unread_count || 0);
+      } catch (e) {
+        console.log("Failed to fetch notifications count", e);
+      }
+    };
+    
+    // Fetch initially
+    fetchUnread();
+
+    // Setup listener to refresh when focusing main tabs
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchUnread();
+    });
+    
+    return unsubscribe;
+  }, [navigation]);
 
   const handleReportPress = async () => {
     try {
@@ -117,7 +139,15 @@ export default function MainTabNavigator() {
           }}
           listeners={{ tabPress: e => { e.preventDefault(); handleReportPress(); } }}
         />
-        <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
+        <Tab.Screen 
+          name="Profile" 
+          component={ProfileScreen} 
+          options={{ 
+            title: 'Profile',
+            tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+            tabBarBadgeStyle: { backgroundColor: '#FF3B30' }
+          }} 
+        />
       </Tab.Navigator>
 
       <ReportIncidentModal

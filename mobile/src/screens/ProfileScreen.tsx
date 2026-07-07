@@ -139,7 +139,7 @@ export default function ProfileScreen({ navigation }: any) {
           {[
             { icon: 'clipboard-outline', label: 'My Reports', action: () => navigation.navigate('MyReports') },
             { icon: 'person-outline', label: 'Account Details', action: () => navigation.navigate('AccountDetails') },
-            { icon: 'notifications-outline', label: 'Notifications', action: () => {} },
+            { icon: 'notifications-outline', label: 'Notifications', action: () => navigation.navigate('Notifications' as never) },
             { icon: 'shield-checkmark-outline', label: 'Privacy & Security', action: () => {} },
             { icon: 'help-circle-outline', label: 'Help & Support', action: () => {} },
           ].map((item, i) => (

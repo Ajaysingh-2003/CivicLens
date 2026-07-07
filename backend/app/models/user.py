@@ -46,3 +46,4 @@ class User(Base):
     assignments_received = relationship("Assignment", foreign_keys="Assignment.assigned_to_id", back_populates="assigned_to")
     assignments_given = relationship("Assignment", foreign_keys="Assignment.assigned_by_id", back_populates="assigned_by")
     histories_created = relationship("IssueHistory", back_populates="actor")
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")

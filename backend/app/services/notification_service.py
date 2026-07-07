@@ -5,9 +5,29 @@ from app.models.issue import Issue, IssueStatus
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
-def send_push(push_token: str, title: str, body: str, data: dict = None):
-    """Core function to send an Expo push notification."""
-    if not push_token:
+import json
+from app.models.notification import Notification
+
+def send_push(db: Session, user: User, title: str, body: str, data: dict = None):
+    """Core function to send an Expo push notification and save to DB."""
+    
+    # 1. Save to database for In-App Notification Center
+    try:
+        db_notif = Notification(
+            user_id=user.id,
+            title=title,
+            body=body,
+            data=json.dumps(data) if data else None
+        )
+        db.add(db_notif)
+        db.commit()
+    except Exception as e:
+        print(f"Failed to save notification to DB for user {user.id}: {e}")
+        db.rollback()
+
+    # 2. Send via Expo
+    push_token = user.push_token
+    if not push_token or not user.notifications_enabled:
         return
         
     message = {
@@ -18,7 +38,6 @@ def send_push(push_token: str, title: str, body: str, data: dict = None):
         "sound": "default",
     }
     
-    # Fire and forget (we could use AsyncClient, but BackgroundTasks runs in a separate thread so httpx.post is fine)
     try:
         response = httpx.post(EXPO_PUSH_URL, json=message, timeout=5.0)
         response.raise_for_status()
@@ -37,8 +56,6 @@ def notify_status_change(issue_id: int, new_status: IssueStatus):
             return
             
         user = issue.reporter
-        if not user.notifications_enabled or not user.push_token:
-            return
             
         status_msg = {
             IssueStatus.PENDING: "is now visible to the public.",
@@ -51,7 +68,8 @@ def notify_status_change(issue_id: int, new_status: IssueStatus):
         body = f"Your report '{issue.title}' {status_msg.get(new_status, 'status has been updated.')}"
         
         send_push(
-            push_token=user.push_token,
+            db=db,
+            user=user,
             title="Status Update 📢",
             body=body,
             data={"issue_id": issue.id, "type": "STATUS_UPDATE"}
@@ -73,14 +91,13 @@ def notify_new_comment(issue_id: int, commenter_id: int):
             return
             
         reporter = issue.reporter
-        if not reporter.notifications_enabled or not reporter.push_token:
-            return
             
         commenter = db.query(User).get(commenter_id)
         commenter_name = commenter.username if commenter else "Someone"
         
         send_push(
-            push_token=reporter.push_token,
+            db=db,
+            user=reporter,
             title="New Comment 💬",
             body=f"{commenter_name} commented on your report: '{issue.title}'",
             data={"issue_id": issue.id, "type": "NEW_COMMENT"}
@@ -98,11 +115,10 @@ def notify_rejection(issue_id: int):
             return
             
         user = issue.reporter
-        if not user.notifications_enabled or not user.push_token:
-            return
             
         send_push(
-            push_token=user.push_token,
+            db=db,
+            user=user,
             title="Report Not Approved ⚠️",
             body=f"Your report '{issue.title}' was flagged by moderation and could not be published.",
             data={"issue_id": issue.id, "type": "REJECTED"}
@@ -122,11 +138,12 @@ def notify_welcome(user_id: int):
     db = SessionLocal()
     try:
         user = db.query(User).get(user_id)
-        if not user or not user.push_token or not user.notifications_enabled:
+        if not user:
             return
         
         send_push(
-            push_token=user.push_token,
+            db=db,
+            user=user,
             title="Welcome to CivicLens! 🎉",
             body="Start making a difference in your city by reporting issues.",
             data={"type": "WELCOME"}
@@ -140,11 +157,12 @@ def notify_level_up(user_id: int):
         db = SessionLocal()
         try:
             user = db.query(User).get(u_id)
-            if not user or not user.push_token or not user.notifications_enabled or not user.level:
+            if not user or not user.level:
                 return
             
             send_push(
-                push_token=user.push_token,
+                db=db,
+                user=user,
                 title="Level Up! 🏆",
                 body=f"Congratulations! You just leveled up to {user.level.title}. Keep it up!",
                 data={"type": "LEVEL_UP"}
@@ -165,11 +183,10 @@ def notify_upvote_milestone(issue_id: int, upvotes: int):
                 return
             
             user = issue.reporter
-            if not user.notifications_enabled or not user.push_token:
-                return
                 
             send_push(
-                push_token=user.push_token,
+                db=db,
+                user=user,
                 title="Community Support 📈",
                 body=f"Your report '{issue.title}' just hit {ups} upvotes!",
                 data={"issue_id": issue.id, "type": "MILESTONE"}
@@ -198,7 +215,8 @@ def notify_nearby_issue(issue_id: int):
             
             for u in nearby_users:
                 send_push(
-                    push_token=u.push_token,
+                    db=db,
+                    user=u,
                     title="New Nearby Report 📍",
                     body=f"A new issue '{issue.title}' was just reported in your city. Can you verify it?",
                     data={"issue_id": issue.id, "type": "NEARBY_ISSUE"}

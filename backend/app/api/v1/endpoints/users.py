@@ -210,3 +210,61 @@ def admin_recalculate_user_points(
         "points": new_points,
         "message": f"Points recalculated for user {user_id}. New total: {new_points}"
     }
+
+from app.models.notification import Notification
+from app.schemas.notification import NotificationResponse
+from typing import List
+
+@router.get("/me/notifications", response_model=List[NotificationResponse])
+def get_my_notifications(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Get the current user's notifications.
+    """
+    # Cap limit to prevent abuse
+    limit = max(1, min(limit, 100))
+    
+    notifications = db.query(Notification).filter(
+        Notification.user_id == current_user.id
+    ).order_by(Notification.created_at.desc()).offset(skip).limit(limit).all()
+    return notifications
+
+@router.get("/me/notifications/unread-count")
+def get_unread_notification_count(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Get the count of unread notifications for the current user.
+    """
+    from sqlalchemy import func as sa_func
+    count = db.query(sa_func.count(Notification.id)).filter(
+        Notification.user_id == current_user.id,
+        Notification.is_read == False
+    ).scalar()
+    return {"unread_count": count}
+
+@router.patch("/me/notifications/{notification_id}/read", response_model=NotificationResponse)
+def mark_notification_read(
+    notification_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    """
+    Mark a notification as read.
+    """
+    notification = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.user_id == current_user.id
+    ).first()
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+        
+    notification.is_read = True
+    db.commit()
+    db.refresh(notification)
+    return notification
