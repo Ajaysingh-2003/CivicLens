@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -52,30 +53,56 @@ function AppNavigator() {
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createNavigationContainerRef } from '@react-navigation/native';
-import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
+
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+
+let Notifications: any = null;
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+const shouldLoadNotifications = !(isExpoGo && Platform.OS === 'android');
+if (shouldLoadNotifications) {
+  try {
+    Notifications = require('expo-notifications');
+  } catch (e) {
+    console.log("Failed to load expo-notifications", e);
+  }
+}
 
 const queryClient = new QueryClient();
 export const navigationRef = createNavigationContainerRef<any>();
 
 export default function App() {
   useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data;
-      if (data) {
-        if (navigationRef.isReady()) {
-          if (data.type === 'LEVEL_UP') {
-            // Wait for navigation container to be ready, then navigate to AccountDetails
-            navigationRef.navigate('AccountDetails');
-          } else if (data.issue_id) {
-            // Milestone, Nearby, Comment, Status update all have issue_id
-            navigationRef.navigate('IssueDetails', { issueId: data.issue_id });
+    let subscription: any = null;
+    
+    const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+    if (isExpoGo && Platform.OS === 'android') {
+       console.log("Push notification listeners are not supported in Expo Go on Android.");
+       return;
+    }
+
+    try {
+      subscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
+        const data = response.notification.request.content.data;
+        if (data) {
+          if (navigationRef.isReady()) {
+            if (data.type === 'LEVEL_UP') {
+              navigationRef.navigate('AccountDetails');
+            } else if (data.issue_id) {
+              navigationRef.navigate('IssueDetails', { issueId: data.issue_id });
+            }
           }
         }
-      }
-    });
+      });
+    } catch (e) {
+      console.log("Failed to add notification listener", e);
+    }
 
-    return () => subscription.remove();
+    return () => {
+      if (subscription) {
+        subscription.remove();
+      }
+    };
   }, []);
 
   return (

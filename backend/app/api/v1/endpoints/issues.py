@@ -101,12 +101,23 @@ async def classify_issue_image(
         raise HTTPException(status_code=500, detail="No categories configured in DB")
         
     category_names = [c.name for c in categories]
+    # Prepare moderation labels
+    moderation_labels = [
+        "A photo of a person's face or selfie",
+        "A photo of a pet or animal",
+        "A photo of food or a meal",
+        "A screenshot, meme, or text document",
+        "Explicit, sexual, or nude content",
+        "Violent or hateful imagery"
+    ]
     
-    # We removed synchronous AI classification to make the UI instant.
-    # We will just suggest the first category or 'Other'
-    suggested_name = "Other" if "Other" in category_names else category_names[0]
+    try:
+        suggested_name = ai_service.classify_image(file_bytes, category_names, moderation_labels)
+    except ValueError as e:
+        # e.g., "Image rejected. Identified as: A photo of a person's face or selfie"
+        raise HTTPException(status_code=400, detail=str(e))
         
-    suggested_category = next(c for c in categories if c.name == suggested_name)
+    suggested_category = next((c for c in categories if c.name == suggested_name), categories[0])
 
     return IssueClassifyResponse(
         image_url=image_url,
@@ -181,9 +192,6 @@ def create_issue(
         raise HTTPException(status_code=409, detail="A similar issue already exists at this location.")
 
     issue = issue_service.create_issue(db, issue_in=issue_in, reporter_id=current_user.id)
-    
-    if issue_in.image_url:
-        background_tasks.add_task(moderate_issue_background, issue["id"], str(issue_in.image_url))
         
     return issue
 
