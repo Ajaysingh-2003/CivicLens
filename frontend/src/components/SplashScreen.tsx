@@ -40,10 +40,10 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
     <div className="splash-screen">
       <div className="splash-logo-container">
         <div className="splash-logo-card">
-          <img src="/logo.png" alt="CivicLens Logo" />
+          <img src="/logo.png" alt="Jantriva Logo" />
         </div>
 
-        <div className="splash-brand-name">CivicLens</div>
+        <div className="splash-brand-name">Jantriva</div>
         <div className="splash-divider" />
       </div>
 
@@ -62,7 +62,7 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
 
       <div className="splash-footer">
         <img src="/logo.png" alt="" />
-        <span>CivicLens</span>
+        <span>Jantriva</span>
       </div>
     </div>
   );

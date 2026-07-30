@@ -1,5 +1,5 @@
 """
-Seed the levels table with the CivicLens gamification level configuration.
+Seed the levels table with the Jantriva gamification level configuration.
 Run once after migration: python -m scripts.seed_levels
 """
 import sys

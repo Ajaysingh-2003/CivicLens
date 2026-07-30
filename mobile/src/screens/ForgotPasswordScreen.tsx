@@ -299,7 +299,7 @@ export default function ForgotPasswordScreen({ navigation }: any) {
       >
         <View style={styles.header}>
           <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.title}>CivicLens</Text>
+          <Text style={styles.title}>Jantriva</Text>
         </View>
 
         {error ? (

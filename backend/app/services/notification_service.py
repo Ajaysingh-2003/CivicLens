@@ -144,7 +144,7 @@ def notify_welcome(user_id: int):
         send_push(
             db=db,
             user=user,
-            title="Welcome to CivicLens! 🎉",
+            title="Welcome to Jantriva! 🎉",
             body="Start making a difference in your city by reporting issues.",
             data={"type": "WELCOME"}
         )

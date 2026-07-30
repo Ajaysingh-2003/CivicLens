@@ -51,7 +51,7 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to the CivicLens API - Auth is perfectly secure!"}
+    return {"message": "Welcome to the Jantriva API - Auth is perfectly secure!"}
 
 @app.get("/ping")
 def ping():

@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "CivicLens API"
+    PROJECT_NAME: str = "Jantriva API"
     DATABASE_URL: str # No defaults! Pydantic will pull strictly from .env
     
     # Auth configuration

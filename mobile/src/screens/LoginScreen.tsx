@@ -45,7 +45,7 @@ export default function LoginScreen({ navigation }: any) {
       <ScrollView contentContainerStyle={styles.formContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.title}>CivicLens</Text>
+          <Text style={styles.title}>Jantriva</Text>
           <Text style={styles.subtitle}>Curating Municipal Growth</Text>
         </View>
 

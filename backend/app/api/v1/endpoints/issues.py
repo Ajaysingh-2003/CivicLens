@@ -13,53 +13,7 @@ from app.models.user import User
 from app.models.category import Category
 from app.models.comment import Comment
 from app.models.issue import Issue, IssueStatus
-from app.db.session import SessionLocal
 from app.utils.profanity import validate_clean_text
-import httpx
-
-def moderate_issue_background(issue_id: int, image_url: str):
-    if not image_url:
-        return
-        
-    db = SessionLocal()
-    try:
-        response = httpx.get(image_url)
-        if response.status_code != 200:
-            return
-            
-        file_bytes = response.content
-        categories = db.query(Category).all()
-        category_names = [c.name for c in categories]
-        moderation_labels = [
-            "A photo of a person's face or selfie",
-            "A photo of a pet or animal",
-            "A photo of food or a meal",
-            "A screenshot, meme, or text document",
-            "Explicit, sexual, or nude content",
-            "Violent or hateful imagery"
-        ]
-        
-        try:
-            ai_service.classify_image(file_bytes, category_names, moderation_labels)
-            issue = db.query(Issue).get(issue_id)
-            if issue and issue.status == IssueStatus.PENDING_MODERATION:
-                issue.status = IssueStatus.PENDING
-                db.commit()
-        except ValueError as e:
-            issue = db.query(Issue).get(issue_id)
-            if issue:
-                issue.status = IssueStatus.REJECTED
-                db.commit()
-                # Notify rejection
-                notification_service.notify_rejection(issue_id)
-    except Exception as e:
-        print(f"Background moderation failed: {e}")
-        issue = db.query(Issue).get(issue_id)
-        if issue and issue.status == IssueStatus.PENDING_MODERATION:
-            issue.status = IssueStatus.PENDING
-            db.commit()
-    finally:
-        db.close()
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -114,9 +68,8 @@ async def classify_issue_image(
     try:
         suggested_name = ai_service.classify_image(file_bytes, category_names, moderation_labels)
     except ValueError as e:
-        # e.g., "Image rejected. Identified as: A photo of a person's face or selfie"
+        # Image was rejected by moderation (selfie, food, explicit, etc.)
         raise HTTPException(status_code=400, detail=str(e))
-        
     suggested_category = next((c for c in categories if c.name == suggested_name), categories[0])
 
     return IssueClassifyResponse(
@@ -169,7 +122,6 @@ def read_issues_map(
 @limiter.limit("5/minute")
 def create_issue(
     request: Request,
-    background_tasks: BackgroundTasks,
     *,
     db: Session = Depends(deps.get_db),
     issue_in: IssueCreate,

@@ -1,4 +1,4 @@
-"""Initial CivicLens Schema
+"""Initial Jantriva Schema
 
 Revision ID: 53505f4d9684
 Revises: 

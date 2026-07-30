@@ -128,14 +128,14 @@ export default function AuthPage({ onLoginSuccess }: { onLoginSuccess?: () => vo
       <div className="auth-card">
         {/* Header */}
         <div className="auth-card-header">
-          <img src="/logo.png" alt="CivicLens" className="auth-card-logo" />
+          <img src="/logo.png" alt="Jantriva" className="auth-card-logo" />
           <div className="auth-card-tagline">
             The Digital Curator for Municipal Growth
           </div>
           <h1 className="auth-card-title">
             {mode === "login"
-              ? "Welcome Back to CivicLens"
-              : "Join CivicLens"}
+              ? "Welcome Back to Jantriva"
+              : "Join Jantriva"}
           </h1>
           <p className="auth-card-subtitle">
             {mode === "login"
@@ -367,7 +367,7 @@ export default function AuthPage({ onLoginSuccess }: { onLoginSuccess?: () => vo
 
       {/* Page Footer */}
       <div className="page-footer">
-        <p>© 2026 CivicLens. All rights reserved.</p>
+        <p>© 2026 Jantriva. All rights reserved.</p>
         <div className="page-footer-links">
           <a href="#">Privacy Policy</a>
           <a href="#">Terms of Service</a>

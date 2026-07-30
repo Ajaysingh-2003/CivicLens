@@ -67,7 +67,7 @@ def create_issue(db: Session, issue_in: IssueCreate, reporter_id: int) -> dict:
     db_obj = Issue(
         title=issue_in.title,
         description=issue_in.description,
-        status=IssueStatus.PENDING_MODERATION,
+        status=IssueStatus.PENDING,
         priority=IssuePriority.LOW, # Default to LOW until upvoted
         category_id=issue_in.category_id,
         reporter_id=reporter_id,

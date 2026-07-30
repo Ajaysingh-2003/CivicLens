@@ -288,7 +288,7 @@ export const api = {
   },
 
   getLevels: async (): Promise<Array<{ level: number; title: string; min_points: number; description?: string }>> => {
-    const CACHE_KEY = 'civiclens_levels_cache';
+    const CACHE_KEY = 'jantriva_levels_cache';
     try {
       const cached = await AsyncStorage.getItem(CACHE_KEY);
       if (cached) return JSON.parse(cached);

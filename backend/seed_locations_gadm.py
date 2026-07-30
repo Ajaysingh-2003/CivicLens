@@ -15,7 +15,7 @@ def seed_locations_gadm():
     db = SessionLocal()
     try:
         print("Loading State Shapefiles (Level 1)...")
-        gdf_states = gpd.read_file('h:/Projects/CivicLens/gadm41_IND_shp/gadm41_IND_1.shp')
+        gdf_states = gpd.read_file('h:/Projects/Jantriva/gadm41_IND_shp/gadm41_IND_1.shp')
         
         # Dissolve by NAME_1 to merge fragmented polygons (islands/enclaves)
         gdf_states_dissolved = gdf_states.dissolve(by='NAME_1', aggfunc='first').reset_index()
@@ -53,7 +53,7 @@ def seed_locations_gadm():
             state_id_map[name] = state.id
         
         print("Loading District Shapefiles (Level 2)...")
-        gdf_districts = gpd.read_file('h:/Projects/CivicLens/gadm41_IND_shp/gadm41_IND_2.shp')
+        gdf_districts = gpd.read_file('h:/Projects/Jantriva/gadm41_IND_shp/gadm41_IND_2.shp')
         
         # Dissolve by State and District name
         gdf_districts_dissolved = gdf_districts.dissolve(by=['NAME_1', 'NAME_2'], aggfunc='first').reset_index()

@@ -92,8 +92,8 @@ export default function DashboardPage() {
     <div className="dashboard-wrapper">
       <div className="sidebar">
         <div className="sidebar-brand">
-          <img src="/logo.png" alt="CivicLens Logo" className="sidebar-logo" />
-          <span>CivicLens</span>
+          <img src="/logo.png" alt="Jantriva Logo" className="sidebar-logo" />
+          <span>Jantriva</span>
         </div>
         
         <div className="sidebar-nav">

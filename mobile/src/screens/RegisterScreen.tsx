@@ -155,7 +155,7 @@ export default function RegisterScreen({ navigation }: any) {
     >
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Join CivicLens</Text>
+          <Text style={styles.title}>Join Jantriva</Text>
           <Text style={styles.subtitle}>Register your field reporting account.</Text>
         </View>
 
@@ -169,7 +169,7 @@ export default function RegisterScreen({ navigation }: any) {
               <Animated.View style={[styles.modalIconContainer, { transform: [{ scale: scaleAnim }] }]}>
                 <Ionicons name="checkmark" size={40} color="#fff" />
               </Animated.View>
-              <Text style={styles.modalTitle}>Welcome to CivicLens</Text>
+              <Text style={styles.modalTitle}>Welcome to Jantriva</Text>
               <Text style={styles.modalText}>
                 Your account has been successfully created. Thank you for joining our community.
               </Text>

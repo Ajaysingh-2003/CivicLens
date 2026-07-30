@@ -282,7 +282,7 @@ export default function ReportIncidentModal({ visible, imageUri, onClose, onSucc
             Upload Rejected
           </Text>
           <Text style={{ fontSize: 16, color: '#4A5568', textAlign: 'center', lineHeight: 24, marginBottom: 8 }}>
-            CivicLens is specifically for reporting civic infrastructure issues.
+            Jantriva is specifically for reporting civic infrastructure issues.
           </Text>
           <Text style={{ fontSize: 16, color: '#4A5568', textAlign: 'center', lineHeight: 24, marginBottom: 32 }}>
             Your image was flagged as: <Text style={{ fontWeight: 'bold', color: '#d32f2f' }}>{rejectedReason}</Text>.

@@ -22,11 +22,11 @@ class User(Base):
     role = Column(SAEnum(UserRole), default=UserRole.CITIZEN, nullable=False)
     is_active = Column(Boolean, default=True)
     is_email_verified = Column(Boolean, default=False)
-    notifications_enabled = Column(Boolean, default=True)
+    notifications_enabled = Column(Boolean, server_default="true", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Gamification
-    points = Column(Integer, default=0)
+    points = Column(Integer, server_default="0", nullable=False)
     level_id = Column(Integer, ForeignKey("levels.id"), nullable=True)
     level = relationship("Level", back_populates="users")
 
